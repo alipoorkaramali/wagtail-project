@@ -1,5 +1,5 @@
 # ============================================================
-#  Main requirements for Wagtail + wagtail-mcp
+#  Main requirements for Wagtail + wagtail-mcp (Django service)
 # ============================================================
 
 # --- Core ---
@@ -9,7 +9,6 @@ wagtail>=6.0,<9.0
 # --- Wagtail MCP ---
 wagtail-mcp==0.3.0
 mcp==2.0.0
-mcp-types==2.0.0
 
 # --- Production server ---
 gunicorn>=22.0.0
@@ -20,9 +19,3 @@ whitenoise>=6.7.0
 # --- Config helpers ---
 dj-database-url>=2.2.0
 python-dotenv>=1.0.1
-dj-static>=0.0.6
-
-# --- MCP Bridge (used by the separate bridge service) ---
-fastapi>=0.115.0
-uvicorn[standard]>=0.32.0
-httpx>=0.27.0

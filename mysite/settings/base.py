@@ -10,19 +10,18 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured  # noqa: F401  (used by production.py)
+
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 BASE_DIR = PROJECT_DIR.parent
 
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
-
-
-# Application definition
-
+# ============================================================
+#  Application definition
+# ============================================================
 INSTALLED_APPS = [
     "home",
     "search",
@@ -37,11 +36,11 @@ INSTALLED_APPS = [
     "wagtail.search",
     "wagtail.admin",
     "wagtail",
-    "wagtail.api.v3",        # ← جدید
-    "wagtail_mcp",           # ← جدید
+    "wagtail.api.v3",
+    "wagtail_mcp",
     "modelcluster",
     "taggit",
-    "rest_framework",        # ← جدید
+    "rest_framework",
     "django_filters",
     "django.contrib.admin",
     "django.contrib.auth",
@@ -84,10 +83,10 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "mysite.wsgi.application"
 
-
-# Database
-# https://docs.djangoproject.com/en/6.1/ref/settings/#databases
-
+# ============================================================
+#  Database
+#  (production.py overrides this with DATABASE_URL if provided)
+# ============================================================
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -95,58 +94,51 @@ DATABASES = {
     }
 }
 
-
-# Password validation
-# https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
-
+# ============================================================
+#  Password validation
+# ============================================================
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
-    },
-    {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
-    },
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-
-# Internationalization
-# https://docs.djangoproject.com/en/6.1/topics/i18n/
-
+# ============================================================
+#  Internationalization
+# ============================================================
 LANGUAGE_CODE = "en-us"
-
 TIME_ZONE = "UTC"
-
 USE_I18N = True
-
 USE_TZ = True
 
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/6.1/howto/static-files/
-
+# ============================================================
+#  Static files
+#  IMPORTANT: STATIC_ROOT must be a DIFFERENT folder from STATICFILES_DIRS
+# ============================================================
 STATICFILES_FINDERS = [
     "django.contrib.staticfiles.finders.FileSystemFinder",
     "django.contrib.staticfiles.finders.AppDirectoriesFinder",
 ]
 
+# Source folders that hold YOUR static files (checked into git)
 STATICFILES_DIRS = [
     PROJECT_DIR / "static",
 ]
 
-STATIC_ROOT = BASE_DIR / "static"
+# Destination folder for `collectstatic` (generated at build time, NOT in git)
+STATIC_ROOT = BASE_DIR / "staticfiles"
 STATIC_URL = "/static/"
 
+# ============================================================
+#  Media files
+# ============================================================
 MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"
 
-# Default storage settings
-# See https://docs.djangoproject.com/en/6.1/ref/settings/#std-setting-STORAGES
+# ============================================================
+#  Storage backends
+# ============================================================
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
@@ -156,43 +148,34 @@ STORAGES = {
     },
 }
 
-# Django sets a maximum of 1000 fields per form by default, but particularly complex page models
-# can exceed this limit within Wagtail's page editor.
+# Django sets a maximum of 1000 fields per form by default, but particularly
+# complex page models can exceed this limit within Wagtail's page editor.
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10_000
 
+# ============================================================
+#  Wagtail settings
+# ============================================================
+WAGTAIL_SITE_NAME = os.environ.get("WAGTAIL_SITE_NAME", "mysite")
 
-# Wagtail settings
-
-WAGTAIL_SITE_NAME = "mysite"
-
-# Search
-# https://docs.wagtail.org/en/stable/topics/search/backends.html
 WAGTAILSEARCH_BACKENDS = {
     "default": {
         "BACKEND": "wagtail.search.backends.database",
     }
 }
 
-# Base URL to use when referring to full URLs within the Wagtail admin backend -
-# e.g. in notification emails. Don't include '/admin' or a trailing slash
-WAGTAILADMIN_BASE_URL = "http://example.com"
+# Base URL used when Wagtail builds absolute URLs (emails, admin, etc).
+# Local dev: http://localhost:8000
+# Production: https://your-app.onrender.com
+WAGTAILADMIN_BASE_URL = os.environ.get("WAGTAILADMIN_BASE_URL", "http://localhost:8000")
 
-# Allowed file extensions for documents in the document library.
-# This can be omitted to allow all files, but note that this may present a security risk
-# if untrusted users are allowed to upload files -
-# see https://docs.wagtail.org/en/stable/advanced_topics/deploying.html#user-uploaded-files
+# Base URL used by wagtail.api.v3 (and wagtail-mcp) to build absolute URLs.
+# Must match the public URL of this Django app.
+WAGTAILAPI_BASE_URL = os.environ.get("WAGTAILAPI_BASE_URL", "http://localhost:8000")
+
+# Allowed file extensions for documents
 WAGTAILDOCS_EXTENSIONS = [
-    "csv",
-    "docx",
-    "key",
-    "odt",
-    "pdf",
-    "pptx",
-    "rtf",
-    "txt",
-    "xlsx",
-    "zip",
+    "csv", "docx", "key", "odt", "pdf", "pptx", "rtf", "txt", "xlsx", "zip",
 ]
 
-# Maximum upload size for documents in bytes.
-WAGTAILDOCS_MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB
+# Max upload size for documents
+WAGTAILDOCS_MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB

@@ -5,49 +5,64 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/home.css' %}">
-{% if page.hero_image %}
-  {% image page.hero_image fill-1600x900 as hero_bg %}
-  <style>
-    .hero {
-      --hero-bg-image: url("{{ hero_bg.url }}");
-    }
-  </style>
-{% endif %}
 {% endblock %}
 
 {% block content %}
 
-{# ═══════════════ HERO (parallax background) ═══════════════ #}
-<section class="hero">
-  <div class="container hero__grid">
-    <div class="hero__content">
-      {% if page.hero_title %}
-        <h1 class="hero__title">{{ page.hero_title }}</h1>
-      {% else %}
-        <h1 class="hero__title">{{ page.title }}</h1>
-      {% endif %}
+{# ═══════════════ HERO — real multi-layer parallax ═══════════════ #}
+<section class="hero-parallax" id="hero-parallax">
+  {# Layer 0: deep background (moves slowest) #}
+  <div class="hero-parallax__layer hero-parallax__layer--bg" data-speed="0.25">
+    {% if page.hero_image %}
+      {% image page.hero_image fill-1920x1200 as hero_bg %}
+      <img src="{{ hero_bg.url }}" alt="" class="hero-parallax__bg-img" aria-hidden="true">
+    {% else %}
+      <div class="hero-parallax__bg-fallback"></div>
+    {% endif %}
+    <div class="hero-parallax__overlay"></div>
+  </div>
 
-      {% if page.hero_subtitle %}
-        <div class="hero__subtitle">{{ page.hero_subtitle|richtext }}</div>
-      {% endif %}
+  {# Layer 1: content (moves at mid speed) #}
+  <div class="hero-parallax__layer hero-parallax__layer--content" data-speed="0.55">
+    <div class="container hero-parallax__grid">
+      <div class="hero-parallax__text">
+        {% if page.hero_title %}
+          <h1 class="hero-parallax__title">{{ page.hero_title }}</h1>
+        {% else %}
+          <h1 class="hero-parallax__title">{{ page.title }}</h1>
+        {% endif %}
 
-      {% if page.hero_button_text and page.hero_button_link %}
-        <a href="{{ page.hero_button_link }}" class="btn btn--primary">
-          {{ page.hero_button_text }}
-        </a>
-      {% endif %}
+        {% if page.hero_subtitle %}
+          <div class="hero-parallax__subtitle">{{ page.hero_subtitle|richtext }}</div>
+        {% endif %}
+
+        {% if page.hero_button_text and page.hero_button_link %}
+          <a href="{{ page.hero_button_link }}" class="btn btn--primary">
+            {{ page.hero_button_text }}
+          </a>
+        {% endif %}
+      </div>
+
+      {# Layer 2: portrait (moves fastest among layers → depth) #}
+      <div class="hero-parallax__portrait" data-speed="0.85">
+        {% if page.hero_image %}
+          {% image page.hero_image fill-700x700 as hero_portrait %}
+          <img
+            src="{{ hero_portrait.url }}"
+            alt="{{ page.hero_image.title }}"
+            class="hero-parallax__portrait-img"
+            width="{{ hero_portrait.width }}"
+            height="{{ hero_portrait.height }}"
+          >
+        {% else %}
+          <div class="hero-parallax__placeholder"><span>✦</span></div>
+        {% endif %}
+      </div>
     </div>
+  </div>
 
-    <div class="hero__visual">
-      {% if page.hero_image %}
-        {% image page.hero_image fill-600x600 as hero_img %}
-        <img src="{{ hero_img.url }}" alt="{{ page.hero_image.title }}" class="hero__img" width="{{ hero_img.width }}" height="{{ hero_img.height }}">
-      {% else %}
-        <div class="hero__placeholder">
-          <span>✦</span>
-        </div>
-      {% endif %}
-    </div>
+  <div class="hero-parallax__scroll-hint" aria-hidden="true">
+    <span></span>
   </div>
 </section>
 
@@ -113,4 +128,8 @@
 </section>
 {% endif %}
 
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/parallax.js' %}"></script>
 {% endblock %}

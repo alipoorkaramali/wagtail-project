@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════
    Home App Design System — by Grok
-   RTL-first · Clean · Modern
+   RTL-first · Clean · Modern · Parallax Hero
    ═══════════════════════════════════════════ */
 
 :root {
@@ -106,12 +106,46 @@ a {
   font-size: 1.05rem;
 }
 
-/* ── Hero ── */
+/* ── Hero (with parallax) ── */
 .hero {
+  position: relative;
   padding-block: 5rem 4rem;
-  min-height: 70vh;
+  min-height: 85vh;
   display: flex;
   align-items: center;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Parallax background layer */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: -20% 0;
+  z-index: -1;
+  background:
+    linear-gradient(160deg, rgba(247, 244, 239, 0.92) 0%, rgba(247, 244, 239, 0.75) 45%, rgba(247, 244, 239, 0.55) 100%),
+    var(--hero-bg-image, none);
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+@supports (background-attachment: fixed) {
+  .hero::before {
+    background-attachment: fixed;
+  }
+}
+
+/* Fallback smooth parallax feel on mobile (fixed often disabled) */
+@media (max-width: 768px) {
+  .hero::before {
+    background-attachment: scroll;
+    inset: 0;
+  }
 }
 
 .hero__grid {
@@ -119,6 +153,8 @@ a {
   grid-template-columns: 1fr 1fr;
   gap: 3.5rem;
   align-items: center;
+  position: relative;
+  z-index: 1;
 }
 
 .hero__title {
@@ -144,14 +180,27 @@ a {
 .hero__visual {
   display: flex;
   justify-content: center;
+  perspective: 1000px;
 }
 
 .hero__img {
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.12),
+    0 8px 20px rgba(0, 0, 0, 0.06);
   object-fit: cover;
   width: 100%;
   max-width: 480px;
+  aspect-ratio: 1;
+  transition: transform 0.5s ease, box-shadow 0.5s ease;
+  transform: translateZ(0);
+}
+
+.hero__img:hover {
+  transform: translateY(-8px) scale(1.02);
+  box-shadow:
+    0 28px 60px rgba(0, 0, 0, 0.16),
+    0 12px 28px rgba(0, 0, 0, 0.08);
 }
 
 .hero__placeholder {
@@ -170,6 +219,8 @@ a {
 /* ── Services ── */
 .services {
   background: var(--color-surface);
+  position: relative;
+  z-index: 2;
 }
 
 .services__grid {
@@ -210,6 +261,11 @@ a {
 }
 
 /* ── About ── */
+.about {
+  position: relative;
+  z-index: 2;
+}
+
 .about__inner {
   max-width: 720px;
   text-align: center;
@@ -225,6 +281,8 @@ a {
   background: var(--color-accent);
   color: #fff;
   text-align: center;
+  position: relative;
+  z-index: 2;
 }
 
 .cta__inner {
@@ -389,6 +447,10 @@ a {
 
   .hero__placeholder {
     max-width: 280px;
+  }
+
+  .hero__img {
+    max-width: 320px;
   }
 
   .section {

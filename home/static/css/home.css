@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════
-   Home App Design System — by Grok
-   RTL-first · Clean · Modern · Parallax Hero
+   Home App Design System — Real Parallax Hero
+   RTL-first · Clean · Modern
    ═══════════════════════════════════════════ */
 
 :root {
@@ -19,7 +19,6 @@
   --space: 1.5rem;
 }
 
-/* ── Reset helpers ── */
 *,
 *::before,
 *::after {
@@ -47,7 +46,6 @@ a {
   color: inherit;
 }
 
-/* ── Layout ── */
 .container {
   width: 100%;
   max-width: var(--max-width);
@@ -57,6 +55,9 @@ a {
 
 .section {
   padding-block: 4.5rem;
+  position: relative;
+  z-index: 2;
+  background: var(--color-bg);
 }
 
 .section__title {
@@ -106,106 +107,123 @@ a {
   font-size: 1.05rem;
 }
 
-/* ── Hero (with parallax) ── */
-.hero {
+/* ═══════════════════════════════════════════
+   REAL PARALLAX HERO
+   ═══════════════════════════════════════════ */
+.hero-parallax {
   position: relative;
-  padding-block: 5rem 4rem;
-  min-height: 85vh;
-  display: flex;
-  align-items: center;
+  height: 100vh;
+  min-height: 640px;
+  max-height: 920px;
   overflow: hidden;
   isolation: isolate;
 }
 
-/* Parallax background layer */
-.hero::before {
-  content: "";
+.hero-parallax__layer {
   position: absolute;
-  inset: -20% 0;
-  z-index: -1;
-  background:
-    linear-gradient(160deg, rgba(247, 244, 239, 0.92) 0%, rgba(247, 244, 239, 0.75) 45%, rgba(247, 244, 239, 0.55) 100%),
-    var(--hero-bg-image, none);
-  background-size: cover;
-  background-position: center center;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
-  transform: translateZ(0);
+  inset: 0;
   will-change: transform;
+  backface-visibility: hidden;
 }
 
-@supports (background-attachment: fixed) {
-  .hero::before {
-    background-attachment: fixed;
-  }
+/* Background layer — taller so it can slide */
+.hero-parallax__layer--bg {
+  top: -12%;
+  bottom: -12%;
+  height: auto;
+  z-index: 0;
 }
 
-/* Fallback smooth parallax feel on mobile (fixed often disabled) */
-@media (max-width: 768px) {
-  .hero::before {
-    background-attachment: scroll;
-    inset: 0;
-  }
+.hero-parallax__bg-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  transform: scale(1.08);
+  filter: saturate(0.92) brightness(0.97);
 }
 
-.hero__grid {
+.hero-parallax__bg-fallback {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(145deg, #e8e2d8 0%, #d5cdc0 50%, #c8bfb2 100%);
+}
+
+.hero-parallax__overlay {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      105deg,
+      rgba(247, 244, 239, 0.92) 0%,
+      rgba(247, 244, 239, 0.78) 42%,
+      rgba(247, 244, 239, 0.35) 70%,
+      rgba(247, 244, 239, 0.15) 100%
+    );
+  pointer-events: none;
+}
+
+/* Content layer */
+.hero-parallax__layer--content {
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+.hero-parallax__layer--content a,
+.hero-parallax__layer--content button {
+  pointer-events: auto;
+}
+
+.hero-parallax__grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 3.5rem;
+  gap: 3rem;
   align-items: center;
-  position: relative;
-  z-index: 1;
+  width: 100%;
+  padding-block: 4rem;
 }
 
-.hero__title {
-  font-size: clamp(2.2rem, 5vw, 3.4rem);
+.hero-parallax__title {
+  font-size: clamp(2.2rem, 5vw, 3.5rem);
   font-weight: 800;
-  line-height: 1.25;
-  margin: 0 0 1.4rem;
+  line-height: 1.22;
+  margin: 0 0 1.3rem;
   letter-spacing: -0.03em;
-  white-space: pre-line;
 }
 
-.hero__subtitle {
+.hero-parallax__subtitle {
   font-size: 1.1rem;
   color: var(--color-muted);
   margin-bottom: 2rem;
   line-height: 1.85;
+  max-width: 34em;
 }
 
-.hero__subtitle p {
+.hero-parallax__subtitle p {
   margin: 0;
 }
 
-.hero__visual {
-  display: flex;
-  justify-content: center;
-  perspective: 1000px;
+/* Portrait layer */
+.hero-parallax__portrait {
+  justify-self: center;
+  will-change: transform;
 }
 
-.hero__img {
+.hero-parallax__portrait-img {
+  width: min(100%, 440px);
+  aspect-ratio: 1;
+  object-fit: cover;
   border-radius: var(--radius-lg);
   box-shadow:
-    0 20px 50px rgba(0, 0, 0, 0.12),
-    0 8px 20px rgba(0, 0, 0, 0.06);
-  object-fit: cover;
-  width: 100%;
-  max-width: 480px;
-  aspect-ratio: 1;
-  transition: transform 0.5s ease, box-shadow 0.5s ease;
-  transform: translateZ(0);
+    0 30px 60px rgba(0, 0, 0, 0.18),
+    0 12px 24px rgba(0, 0, 0, 0.08);
+  border: 4px solid rgba(255, 255, 255, 0.7);
 }
 
-.hero__img:hover {
-  transform: translateY(-8px) scale(1.02);
-  box-shadow:
-    0 28px 60px rgba(0, 0, 0, 0.16),
-    0 12px 28px rgba(0, 0, 0, 0.08);
-}
-
-.hero__placeholder {
-  width: 100%;
-  max-width: 420px;
+.hero-parallax__placeholder {
+  width: min(100%, 400px);
   aspect-ratio: 1;
   border-radius: var(--radius-lg);
   background: linear-gradient(145deg, #e8e2d8, #d5cdc0);
@@ -216,11 +234,38 @@ a {
   color: #a89f92;
 }
 
+/* Scroll hint */
+.hero-parallax__scroll-hint {
+  position: absolute;
+  bottom: 1.8rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  width: 22px;
+  height: 36px;
+  border: 2px solid rgba(26, 25, 22, 0.35);
+  border-radius: 12px;
+  pointer-events: none;
+}
+
+.hero-parallax__scroll-hint span {
+  display: block;
+  width: 4px;
+  height: 8px;
+  margin: 6px auto 0;
+  background: rgba(26, 25, 22, 0.45);
+  border-radius: 2px;
+  animation: scroll-dot 1.6s ease-in-out infinite;
+}
+
+@keyframes scroll-dot {
+  0% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(12px); }
+}
+
 /* ── Services ── */
 .services {
   background: var(--color-surface);
-  position: relative;
-  z-index: 2;
 }
 
 .services__grid {
@@ -261,11 +306,6 @@ a {
 }
 
 /* ── About ── */
-.about {
-  position: relative;
-  z-index: 2;
-}
-
 .about__inner {
   max-width: 720px;
   text-align: center;
@@ -281,8 +321,6 @@ a {
   background: var(--color-accent);
   color: #fff;
   text-align: center;
-  position: relative;
-  z-index: 2;
 }
 
 .cta__inner {
@@ -430,27 +468,30 @@ a {
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
-  .hero {
-    padding-block: 3rem;
-    min-height: auto;
+  .hero-parallax {
+    height: auto;
+    min-height: 100svh;
+    max-height: none;
   }
 
-  .hero__grid {
+  .hero-parallax__grid {
     grid-template-columns: 1fr;
-    gap: 2.5rem;
+    gap: 2rem;
     text-align: center;
+    padding-block: 3rem 4rem;
   }
 
-  .hero__visual {
+  .hero-parallax__portrait {
     order: -1;
   }
 
-  .hero__placeholder {
-    max-width: 280px;
+  .hero-parallax__portrait-img {
+    width: min(100%, 280px);
+    margin-inline: auto;
   }
 
-  .hero__img {
-    max-width: 320px;
+  .hero-parallax__subtitle {
+    margin-inline: auto;
   }
 
   .section {
@@ -459,5 +500,16 @@ a {
 
   .services__grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-parallax__layer,
+  .hero-parallax__portrait {
+    transform: none !important;
+  }
+
+  .hero-parallax__scroll-hint span {
+    animation: none;
   }
 }

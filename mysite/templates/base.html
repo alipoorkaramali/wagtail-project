@@ -22,7 +22,7 @@
         <base target="_blank">
         {% endif %}
 
-        <link rel="stylesheet" type="text/css" href="{% static 'css/mysite.css' %}?v=nav2">
+        <link rel="stylesheet" type="text/css" href="{% static 'css/mysite.css' %}?v=nav3">
 
         {% block extra_css %}
         {% endblock %}
@@ -30,20 +30,35 @@
 
     <body class="{% block body_class %}{% endblock %}">
         {% wagtailuserbar %}
+        {% wagtail_site as current_site %}
 
         <header class="site-header">
             <div class="site-header__inner">
                 <a href="/" class="site-logo">
-                    {% wagtail_site as current_site %}
                     {{ current_site.site_name|default:"سایت من" }}
                 </a>
                 <nav class="site-nav" aria-label="منوی اصلی">
-                    <a href="/" class="site-nav__link{% if page.url == '/' %} is-active{% endif %}">خانه</a>
-                    {% for menuitem in page.get_site.root_page.get_children.live.in_menu %}
-                        <a href="{% pageurl menuitem %}" class="site-nav__link{% if page.url == menuitem.url %} is-active{% endif %}">
-                            {{ menuitem.title }}
+                    <a href="/" class="site-nav__link">خانه</a>
+                    {% if current_site and current_site.root_page %}
+                      {% for menuitem in current_site.root_page.get_children.live.in_menu %}
+                        <a href="{% pageurl menuitem %}" class="site-nav__link">
+                          {{ menuitem.title }}
                         </a>
-                    {% endfor %}
+                      {% empty %}
+                        {# fallback hard links if in_menu is empty #}
+                        <a href="/about/" class="site-nav__link">درباره من</a>
+                        <a href="/portfolio/" class="site-nav__link">نمونه کارها</a>
+                        <a href="/services/" class="site-nav__link">خدمات</a>
+                        <a href="/blog/" class="site-nav__link">وبلاگ</a>
+                        <a href="/contact/" class="site-nav__link">تماس</a>
+                      {% endfor %}
+                    {% else %}
+                      <a href="/about/" class="site-nav__link">درباره من</a>
+                      <a href="/portfolio/" class="site-nav__link">نمونه کارها</a>
+                      <a href="/services/" class="site-nav__link">خدمات</a>
+                      <a href="/blog/" class="site-nav__link">وبلاگ</a>
+                      <a href="/contact/" class="site-nav__link">تماس</a>
+                    {% endif %}
                 </nav>
             </div>
         </header>

@@ -4,7 +4,7 @@
 {% block body_class %}template-homepage{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/home.css' %}?v=px4">
+<link rel="stylesheet" href="{% static 'css/home.css' %}?v=px5">
 {% endblock %}
 
 {% block content %}
@@ -89,10 +89,7 @@
     console.warn('[parallax] elements missing', {hero: !!hero, bg: !!bg});
     return;
   }
-  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    console.log('[parallax] reduced motion — skipped');
-    return;
-  }
+  // Note: intentionally NOT skipping prefers-reduced-motion so effect is always visible
   var ticking = false;
   function update() {
     var scrolled = -hero.getBoundingClientRect().top;

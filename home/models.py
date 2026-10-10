@@ -6,6 +6,7 @@ from wagtail.admin.panels import FieldPanel, MultiFieldPanel, InlinePanel
 from wagtail import blocks
 from wagtail.images.blocks import ImageChooserBlock
 from wagtail.images.models import Image
+from wagtail.api import APIField
 
 
 # ──────────────────────────────────────────────
@@ -114,6 +115,12 @@ class ServiceItem(Orderable):
         FieldPanel("icon"),
         FieldPanel("title"),
         FieldPanel("description"),
+    ]
+
+    api_fields = [
+        APIField("title"),
+        APIField("description"),
+        APIField("icon"),
     ]
 
 
@@ -241,6 +248,23 @@ class HomePage(Page):
         FieldPanel("body"),
     ]
 
+    api_fields = [
+        APIField("hero_title"),
+        APIField("hero_subtitle"),
+        APIField("hero_button_text"),
+        APIField("hero_button_link"),
+        APIField("hero_image"),
+        APIField("about_title"),
+        APIField("about_text"),
+        APIField("services_title"),
+        APIField("cta_title"),
+        APIField("cta_text"),
+        APIField("cta_button_text"),
+        APIField("cta_button_link"),
+        APIField("body"),
+        APIField("services"),
+    ]
+
     class Meta:
         verbose_name = "صفحه اصلی"
         verbose_name_plural = "صفحات اصلی"
@@ -276,6 +300,12 @@ class StandardPage(Page):
         FieldPanel("intro"),
         FieldPanel("featured_image"),
         FieldPanel("body"),
+    ]
+
+    api_fields = [
+        APIField("intro"),
+        APIField("body"),
+        APIField("featured_image"),
     ]
 
     class Meta:

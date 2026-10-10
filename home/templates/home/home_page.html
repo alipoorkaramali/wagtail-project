@@ -4,98 +4,33 @@
 {% block body_class %}template-homepage{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/home.css' %}?v=px3">
-<style>
-/* ===== INLINE PARALLAX (guaranteed load) ===== */
-.px-hero{
-  position:relative;
-  height:100vh;
-  min-height:620px;
-  max-height:900px;
-  overflow:hidden;
-  isolation:isolate;
-}
-.px-hero__bg{
-  position:absolute;
-  left:0;right:0;
-  top:-40%;
-  height:180%;
-  z-index:0;
-  will-change:transform;
-}
-.px-hero__bg-img{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-  object-position:center 30%;
-  display:block;
-}
-.px-hero__bg-fallback{
-  width:100%;height:100%;
-  background:linear-gradient(160deg,#d9d0c4,#b0a494);
-}
-.px-hero__veil{
-  position:absolute;inset:0;
-  background:linear-gradient(100deg,
-    rgba(247,244,239,.95) 0%,
-    rgba(247,244,239,.85) 35%,
-    rgba(247,244,239,.45) 65%,
-    rgba(247,244,239,.2) 100%);
-  pointer-events:none;
-}
-.px-hero__fg{
-  position:relative;
-  z-index:2;
-  height:100%;
-  display:flex;
-  align-items:center;
-}
-.px-hero__grid{
-  display:grid;
-  grid-template-columns:1.05fr .95fr;
-  gap:2.5rem;
-  align-items:center;
-  width:100%;
-}
-.px-hero__title{
-  font-size:clamp(2.3rem,5.2vw,3.6rem);
-  font-weight:800;
-  line-height:1.2;
-  margin:0 0 1.2rem;
-  letter-spacing:-.03em;
-}
-.px-hero__subtitle{
-  font-size:1.08rem;
-  color:#6b6560;
-  margin-bottom:1.8rem;
-  line-height:1.85;
-  max-width:32em;
-}
-.px-hero__subtitle p{margin:0}
-.px-hero__card{
-  justify-self:center;
-  will-change:transform;
-}
-.px-hero__card-img{
-  width:min(100%,420px);
-  aspect-ratio:1;
-  object-fit:cover;
-  border-radius:24px;
-  box-shadow:0 40px 80px rgba(0,0,0,.22),0 16px 32px rgba(0,0,0,.1);
-  border:5px solid rgba(255,255,255,.85);
-}
-@media(max-width:768px){
-  .px-hero{height:auto;min-height:100svh;max-height:none}
-  .px-hero__fg{padding-block:3rem 4rem}
-  .px-hero__grid{grid-template-columns:1fr;gap:2rem;text-align:center}
-  .px-hero__card{order:-1}
-  .px-hero__card-img{width:min(100%,260px);margin-inline:auto}
-  .px-hero__subtitle{margin-inline:auto}
-}
-</style>
+<link rel="stylesheet" href="{% static 'css/home.css' %}?v=px4">
 {% endblock %}
 
 {% block content %}
+
+<style id="px-force-css">
+.px-hero{position:relative;height:100vh;min-height:620px;max-height:900px;overflow:hidden;isolation:isolate}
+.px-hero__bg{position:absolute;left:0;right:0;top:-40%;height:180%;z-index:0;will-change:transform}
+.px-hero__bg-img{width:100%;height:100%;object-fit:cover;object-position:center 30%;display:block}
+.px-hero__bg-fallback{width:100%;height:100%;background:linear-gradient(160deg,#d9d0c4,#b0a494)}
+.px-hero__veil{position:absolute;inset:0;background:linear-gradient(100deg,rgba(247,244,239,.95) 0%,rgba(247,244,239,.85) 35%,rgba(247,244,239,.45) 65%,rgba(247,244,239,.2) 100%);pointer-events:none}
+.px-hero__fg{position:relative;z-index:2;height:100%;display:flex;align-items:center}
+.px-hero__grid{display:grid;grid-template-columns:1.05fr .95fr;gap:2.5rem;align-items:center;width:100%}
+.px-hero__title{font-size:clamp(2.3rem,5.2vw,3.6rem);font-weight:800;line-height:1.2;margin:0 0 1.2rem;letter-spacing:-.03em}
+.px-hero__subtitle{font-size:1.08rem;color:#6b6560;margin-bottom:1.8rem;line-height:1.85;max-width:32em}
+.px-hero__subtitle p{margin:0}
+.px-hero__card{justify-self:center;will-change:transform}
+.px-hero__card-img{width:min(100%,420px);aspect-ratio:1;object-fit:cover;border-radius:24px;box-shadow:0 40px 80px rgba(0,0,0,.22),0 16px 32px rgba(0,0,0,.1);border:5px solid rgba(255,255,255,.85)}
+@media(max-width:768px){
+.px-hero{height:auto;min-height:100svh;max-height:none}
+.px-hero__fg{padding-block:3rem 4rem}
+.px-hero__grid{grid-template-columns:1fr;gap:2rem;text-align:center}
+.px-hero__card{order:-1}
+.px-hero__card-img{width:min(100%,260px);margin-inline:auto}
+.px-hero__subtitle{margin-inline:auto}
+}
+</style>
 
 <section class="px-hero" id="px-hero">
   <div class="px-hero__bg" id="px-bg">
@@ -143,6 +78,40 @@
     </div>
   </div>
 </section>
+
+<script>
+(function () {
+  console.log('[parallax] script loaded');
+  var hero = document.getElementById('px-hero');
+  var bg = document.getElementById('px-bg');
+  var card = document.getElementById('px-card');
+  if (!hero || !bg) {
+    console.warn('[parallax] elements missing', {hero: !!hero, bg: !!bg});
+    return;
+  }
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    console.log('[parallax] reduced motion — skipped');
+    return;
+  }
+  var ticking = false;
+  function update() {
+    var scrolled = -hero.getBoundingClientRect().top;
+    bg.style.transform = 'translate3d(0,' + (scrolled * 0.45) + 'px,0)';
+    if (card) card.style.transform = 'translate3d(0,' + (scrolled * -0.25) + 'px,0)';
+    ticking = false;
+  }
+  function onScroll() {
+    if (!ticking) {
+      requestAnimationFrame(update);
+      ticking = true;
+    }
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll, { passive: true });
+  update();
+  console.log('[parallax] active');
+})();
+</script>
 
 {% if page.services.all %}
 <section class="section services">
@@ -202,49 +171,4 @@
 </section>
 {% endif %}
 
-{% endblock %}
-
-{% block extra_js %}
-<script>
-(function () {
-  var hero = document.getElementById('px-hero');
-  var bg = document.getElementById('px-bg');
-  var card = document.getElementById('px-card');
-  if (!hero || !bg) {
-    console.warn('[parallax] hero elements not found');
-    return;
-  }
-
-  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (reduced) return;
-
-  var ticking = false;
-
-  function update() {
-    var top = hero.getBoundingClientRect().top;
-    var scrolled = -top;
-
-    // Strong lag on background
-    bg.style.transform = 'translate3d(0,' + (scrolled * 0.45) + 'px,0)';
-
-    // Card moves opposite direction slightly
-    if (card) {
-      card.style.transform = 'translate3d(0,' + (scrolled * -0.25) + 'px,0)';
-    }
-    ticking = false;
-  }
-
-  function onScroll() {
-    if (!ticking) {
-      requestAnimationFrame(update);
-      ticking = true;
-    }
-  }
-
-  window.addEventListener('scroll', onScroll, { passive: true });
-  window.addEventListener('resize', onScroll, { passive: true });
-  update();
-  console.log('[parallax] active');
-})();
-</script>
 {% endblock %}

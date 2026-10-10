@@ -5,7 +5,6 @@ from wagtail.fields import RichTextField, StreamField
 from wagtail.admin.panels import FieldPanel, MultiFieldPanel, InlinePanel
 from wagtail import blocks
 from wagtail.images.blocks import ImageChooserBlock
-from wagtail.images.models import Image
 from wagtail.api import APIField
 
 
@@ -132,6 +131,15 @@ class HomePage(Page):
     """صفحه اصلی — هیرو + سرویس‌ها + درباره + CTA + محتوای آزاد"""
 
     # ── Hero ──
+    hero_image = models.ForeignKey(
+        "wagtailimages.Image",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        verbose_name="عکس هیرو و پارالاکس",
+        help_text="این عکس هم به‌عنوان پرتره هیرو و هم پس‌زمینه پارالاکس استفاده می‌شود. برای عوض کردن، Choose an image را بزنید.",
+    )
     hero_title = models.CharField(
         max_length=200,
         blank=True,
@@ -151,14 +159,6 @@ class HomePage(Page):
     hero_button_link = models.URLField(
         blank=True,
         verbose_name="لینک دکمه",
-    )
-    hero_image = models.ForeignKey(
-        "wagtailimages.Image",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="+",
-        verbose_name="تصویر هیرو",
     )
 
     # ── About section ──
@@ -214,13 +214,13 @@ class HomePage(Page):
     content_panels = Page.content_panels + [
         MultiFieldPanel(
             [
+                FieldPanel("hero_image"),
                 FieldPanel("hero_title"),
                 FieldPanel("hero_subtitle"),
                 FieldPanel("hero_button_text"),
                 FieldPanel("hero_button_link"),
-                FieldPanel("hero_image"),
             ],
-            heading="بخش هیرو",
+            heading="بخش هیرو (عکس + متن + پارالاکس)",
         ),
         MultiFieldPanel(
             [

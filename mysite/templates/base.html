@@ -22,7 +22,7 @@
         <base target="_blank">
         {% endif %}
 
-        <link rel="stylesheet" type="text/css" href="{% static 'css/mysite.css' %}">
+        <link rel="stylesheet" type="text/css" href="{% static 'css/mysite.css' %}?v=nav2">
 
         {% block extra_css %}
         {% endblock %}
@@ -38,7 +38,12 @@
                     {{ current_site.site_name|default:"سایت من" }}
                 </a>
                 <nav class="site-nav" aria-label="منوی اصلی">
-                    {# Navigation links can be expanded later via a menu snippet #}
+                    <a href="/" class="site-nav__link{% if page.url == '/' %} is-active{% endif %}">خانه</a>
+                    {% for menuitem in page.get_site.root_page.get_children.live.in_menu %}
+                        <a href="{% pageurl menuitem %}" class="site-nav__link{% if page.url == menuitem.url %} is-active{% endif %}">
+                            {{ menuitem.title }}
+                        </a>
+                    {% endfor %}
                 </nav>
             </div>
         </header>

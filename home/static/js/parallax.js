@@ -1,45 +1,56 @@
 /**
- * Real multi-layer parallax for homepage hero
- * Layers move at different speeds based on data-speed
+ * Dramatic parallax:
+ * - Background moves at ~20% of scroll speed (lags hard)
+ * - Card moves at ~120% (slightly ahead) for depth contrast
  */
 (function () {
-  const hero = document.getElementById("hero-parallax");
-  if (!hero) return;
+  var hero = document.getElementById("px-hero");
+  var bg = document.getElementById("px-bg");
+  var card = document.getElementById("px-card");
+  if (!hero || !bg) return;
 
-  const layers = hero.querySelectorAll("[data-speed]");
-  const prefersReduced =
-    window.matchMedia &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    return;
+  }
 
-  if (prefersReduced || layers.length === 0) return;
+  var ticking = false;
 
-  let ticking = false;
+  function frame() {
+    var rect = hero.getBoundingClientRect();
+    var heroTop = rect.top;
+    var heroH = hero.offsetHeight || 1;
 
-  function update() {
-    const rect = hero.getBoundingClientRect();
-    const heroH = hero.offsetHeight || 1;
-    // progress: 0 at top of hero in view, increases as user scrolls down
-    const scrolled = -rect.top;
-    const progress = scrolled / heroH;
+    // How far we've scrolled through the hero (px)
+    // When hero top is at 0, scrolled = 0; as we scroll down, heroTop becomes negative
+    var scrolled = -heroTop;
 
-    layers.forEach(function (layer) {
-      const speed = parseFloat(layer.getAttribute("data-speed")) || 0.5;
-      // move downward slower than scroll → parallax depth
-      const y = scrolled * (1 - speed);
-      layer.style.transform = "translate3d(0, " + y.toFixed(2) + "px, 0)";
-    });
+    // Only apply while hero is in/near viewport
+    if (scrolled < -window.innerHeight || scrolled > heroH + window.innerHeight) {
+      ticking = false;
+      return;
+    }
+
+    // BG: moves SLOW — only 15–25% of scroll distance → obvious lag
+    var bgY = scrolled * 0.35;
+    bg.style.transform = "translate3d(0, " + bgY + "px, 0)";
+
+    // Card: moves a bit FASTER than scroll for opposite depth
+    if (card) {
+      var cardY = scrolled * -0.18; // goes slightly up as you scroll down
+      card.style.transform = "translate3d(0, " + cardY + "px, 0)";
+    }
 
     ticking = false;
   }
 
   function onScroll() {
     if (!ticking) {
-      window.requestAnimationFrame(update);
+      requestAnimationFrame(frame);
       ticking = true;
     }
   }
 
   window.addEventListener("scroll", onScroll, { passive: true });
   window.addEventListener("resize", onScroll, { passive: true });
-  update();
+  frame();
 })();

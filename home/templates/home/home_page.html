@@ -1,149 +1,108 @@
 {% extends "base.html" %}
-{% load static wagtailcore_tags %}
+{% load static wagtailcore_tags wagtailimages_tags %}
 
 {% block body_class %}template-homepage{% endblock %}
 
 {% block extra_css %}
-<style>
-    body {
-        margin: 0;
-        font-family: Tahoma, 'Segoe UI', sans-serif;
-        background-color: #f8f5f0;
-        color: #1D1C22;
-        direction: rtl;
-    }
-
-    .hero-section {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 80px 20px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 40px;
-        min-height: 80vh;
-    }
-
-    .hero-content {
-        flex: 1;
-        max-width: 500px;
-    }
-
-    .hero-content h1 {
-        font-size: 3rem;
-        line-height: 1.3;
-        margin-bottom: 25px;
-        font-weight: 700;
-        white-space: pre-line;
-    }
-
-    .hero-content p {
-        font-size: 1.1rem;
-        line-height: 1.8;
-        margin-bottom: 30px;
-        color: #444;
-    }
-
-    .btn-primary {
-        display: inline-block;
-        padding: 14px 32px;
-        border: 1.5px solid #1D1C22;
-        color: #1D1C22;
-        text-decoration: none;
-        font-size: 15px;
-        font-weight: 600;
-        transition: all 0.3s ease;
-        background: transparent;
-    }
-
-    .btn-primary:hover {
-        background-color: #1D1C22;
-        color: #fff;
-    }
-
-    .social-section {
-        margin-top: 60px;
-    }
-
-    .social-section span {
-        display: block;
-        margin-bottom: 15px;
-        font-size: 0.95rem;
-        color: #666;
-    }
-
-    .social-links a {
-        display: inline-block;
-        margin-left: 18px;
-        color: #1D1C22;
-        text-decoration: none;
-        font-size: 1.3rem;
-        transition: color 0.3s;
-    }
-
-    .social-links a:hover {
-        color: #666;
-    }
-
-    .hero-image {
-        flex: 1;
-        text-align: center;
-    }
-
-    .hero-image img {
-        max-width: 100%;
-        height: auto;
-        border-radius: 12px;
-    }
-
-    @media (max-width: 768px) {
-        .hero-section {
-            flex-direction: column-reverse;
-            text-align: center;
-            padding: 50px 20px;
-        }
-
-        .hero-content h1 {
-            font-size: 2.2rem;
-        }
-
-        .social-section {
-            margin-top: 40px;
-        }
-    }
-</style>
+<link rel="stylesheet" href="{% static 'css/home.css' %}">
 {% endblock %}
 
 {% block content %}
-<section class="hero-section">
 
-    <div class="hero-content">
-        <h1>طراح وب‌سایت و
-گرافیست</h1>
+{# ═══════════════ HERO ═══════════════ #}
+<section class="hero">
+  <div class="container hero__grid">
+    <div class="hero__content">
+      {% if page.hero_title %}
+        <h1 class="hero__title">{{ page.hero_title }}</h1>
+      {% else %}
+        <h1 class="hero__title">{{ page.title }}</h1>
+      {% endif %}
 
-        <p>
-            من یک طراح وب و گرافیست هستم که به ساخت تجربه‌های دیجیتال زیبا و کاربردی علاقه دارم.
-        </p>
+      {% if page.hero_subtitle %}
+        <div class="hero__subtitle">{{ page.hero_subtitle|richtext }}</div>
+      {% endif %}
 
-        <a href="#" class="btn-primary">Book A Call</a>
-
-        <div class="social-section">
-            <span>من را دنبال کنید:</span>
-            <div class="social-links">
-                <a href="#" title="Instagram">📷</a>
-                <a href="#" title="LinkedIn">💼</a>
-                <a href="#" title="GitHub">🐙</a>
-                <a href="#" title="Twitter">🐦</a>
-            </div>
-        </div>
+      {% if page.hero_button_text and page.hero_button_link %}
+        <a href="{{ page.hero_button_link }}" class="btn btn--primary">
+          {{ page.hero_button_text }}
+        </a>
+      {% endif %}
     </div>
 
-    <div class="hero-image">
-        <!-- اگر تصویر داری اینجا بذار -->
-        <div style="width: 100%; height: 400px; background: linear-gradient(135deg, #e8e0d5, #d4cbb8); border-radius: 16px; display: flex; align-items: center; justify-content: center; color: #888;">
-            تصویر شما
+    <div class="hero__visual">
+      {% if page.hero_image %}
+        {% image page.hero_image fill-600x600 as hero_img %}
+        <img src="{{ hero_img.url }}" alt="{{ page.hero_image.title }}" class="hero__img" width="{{ hero_img.width }}" height="{{ hero_img.height }}">
+      {% else %}
+        <div class="hero__placeholder">
+          <span>✦</span>
         </div>
+      {% endif %}
     </div>
-
+  </div>
 </section>
+
+{# ═══════════════ SERVICES ═══════════════ #}
+{% if page.services.all %}
+<section class="section services">
+  <div class="container">
+    {% if page.services_title %}
+      <h2 class="section__title">{{ page.services_title }}</h2>
+    {% endif %}
+    <div class="services__grid">
+      {% for item in page.services.all %}
+        <article class="service-card">
+          <div class="service-card__icon">{{ item.icon }}</div>
+          <h3 class="service-card__title">{{ item.title }}</h3>
+          {% if item.description %}
+            <p class="service-card__desc">{{ item.description }}</p>
+          {% endif %}
+        </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{# ═══════════════ ABOUT ═══════════════ #}
+{% if page.about_text %}
+<section class="section about">
+  <div class="container about__inner">
+    {% if page.about_title %}
+      <h2 class="section__title">{{ page.about_title }}</h2>
+    {% endif %}
+    <div class="about__text prose">{{ page.about_text|richtext }}</div>
+  </div>
+</section>
+{% endif %}
+
+{# ═══════════════ FREE BODY ═══════════════ #}
+{% if page.body %}
+<section class="section body-content">
+  <div class="container prose">
+    {% for block in page.body %}
+      {% include_block block %}
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{# ═══════════════ CTA ═══════════════ #}
+{% if page.cta_title %}
+<section class="section cta">
+  <div class="container cta__inner">
+    <h2 class="cta__title">{{ page.cta_title }}</h2>
+    {% if page.cta_text %}
+      <p class="cta__text">{{ page.cta_text }}</p>
+    {% endif %}
+    {% if page.cta_button_text and page.cta_button_link %}
+      <a href="{{ page.cta_button_link }}" class="btn btn--primary btn--lg">
+        {{ page.cta_button_text }}
+      </a>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
 {% endblock %}

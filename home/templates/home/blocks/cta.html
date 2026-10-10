@@ -1,0 +1,7 @@
+<div class="stream-cta">
+  <h3 class="stream-cta__title">{{ value.title }}</h3>
+  {% if value.text %}
+    <p class="stream-cta__text">{{ value.text }}</p>
+  {% endif %}
+  <a href="{{ value.button_link }}" class="btn btn--primary">{{ value.button_text }}</a>
+</div>

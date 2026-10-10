@@ -1,0 +1,43 @@
+/* Global site styles */
+
+.site-header {
+  background: #fff;
+  border-bottom: 1px solid #e4dfd7;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.site-header__inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.site-logo {
+  font-weight: 800;
+  font-size: 1.15rem;
+  text-decoration: none;
+  color: #1a1916;
+  letter-spacing: -0.02em;
+}
+
+.site-footer {
+  background: #1a1916;
+  color: #c8c2b8;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.site-footer__inner {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.site-footer p {
+  margin: 0;
+}

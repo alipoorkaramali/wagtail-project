@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% load static wagtailcore_tags wagtailimages_tags %}
+
+{% block body_class %}template-standardpage{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/home.css' %}">
+{% endblock %}
+
+{% block content %}
+<article class="standard-page">
+  <header class="page-header">
+    <div class="container">
+      <h1 class="page-header__title">{{ page.title }}</h1>
+      {% if page.intro %}
+        <div class="page-header__intro prose">{{ page.intro|richtext }}</div>
+      {% endif %}
+    </div>
+  </header>
+
+  {% if page.featured_image %}
+    <div class="featured-image">
+      <div class="container">
+        {% image page.featured_image width-1200 as feat %}
+        <img src="{{ feat.url }}" alt="{{ page.featured_image.title }}" class="featured-image__img" width="{{ feat.width }}" height="{{ feat.height }}">
+      </div>
+    </div>
+  {% endif %}
+
+  {% if page.body %}
+    <section class="section">
+      <div class="container prose">
+        {% for block in page.body %}
+          {% include_block block %}
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+</article>
+{% endblock %}

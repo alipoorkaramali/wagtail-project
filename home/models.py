@@ -118,9 +118,9 @@ class ServiceItem(Orderable):
     ]
 
     api_fields = [
-        APIField("title"),
-        APIField("description"),
-        APIField("icon"),
+        APIField("title", writable=True),
+        APIField("description", writable=True),
+        APIField("icon", writable=True),
     ]
 
 
@@ -249,20 +249,20 @@ class HomePage(Page):
     ]
 
     api_fields = [
-        APIField("hero_title"),
-        APIField("hero_subtitle"),
-        APIField("hero_button_text"),
-        APIField("hero_button_link"),
-        APIField("hero_image"),
-        APIField("about_title"),
-        APIField("about_text"),
-        APIField("services_title"),
-        APIField("cta_title"),
-        APIField("cta_text"),
-        APIField("cta_button_text"),
-        APIField("cta_button_link"),
-        APIField("body"),
-        APIField("services"),
+        APIField("hero_title", writable=True),
+        APIField("hero_subtitle", writable=True),
+        APIField("hero_button_text", writable=True),
+        APIField("hero_button_link", writable=True),
+        APIField("hero_image", writable=True),
+        APIField("about_title", writable=True),
+        APIField("about_text", writable=True),
+        APIField("services_title", writable=True),
+        APIField("cta_title", writable=True),
+        APIField("cta_text", writable=True),
+        APIField("cta_button_text", writable=True),
+        APIField("cta_button_link", writable=True),
+        APIField("body", writable=True),
+        APIField("services", writable=True),
     ]
 
     class Meta:
@@ -303,9 +303,9 @@ class StandardPage(Page):
     ]
 
     api_fields = [
-        APIField("intro"),
-        APIField("body"),
-        APIField("featured_image"),
+        APIField("intro", writable=True),
+        APIField("body", writable=True),
+        APIField("featured_image", writable=True),
     ]
 
     class Meta:

@@ -14,15 +14,15 @@ from __future__ import annotations
 
 import json
 import logging
-import queue
+import time
 import uuid
-from queue import Queue
+from queue import Empty, Queue
 from typing import Dict
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from django.conf import settings
-from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
+from django.http import HttpRequest, JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
@@ -138,8 +138,8 @@ def sse(request: HttpRequest):
         )
 
     session_id = str(uuid.uuid4())
-    queue: Queue = Queue()
-    _sessions[session_id] = queue
+    msg_queue: Queue = Queue()
+    _sessions[session_id] = msg_queue
     _session_touch[session_id] = time.time()
 
     base = _public_base(request)
@@ -151,9 +151,8 @@ def sse(request: HttpRequest):
         try:
             while True:
                 try:
-                    msg = queue.get(timeout=25)
-                except Exception:
-                    # keepalive so proxies don't close the stream
+                    msg = msg_queue.get(timeout=25)
+                except Empty:
                     yield ": ping\n\n"
                     continue
                 if msg is None:
@@ -182,8 +181,8 @@ def messages(request: HttpRequest):
     if not session_id:
         return JsonResponse({"error": "missing session_id"}, status=400)
 
-    queue = _sessions.get(session_id)
-    if queue is None:
+    msg_queue = _sessions.get(session_id)
+    if msg_queue is None:
         return JsonResponse({"error": "invalid or expired session"}, status=404)
 
     _session_touch[session_id] = time.time()
@@ -201,7 +200,7 @@ def messages(request: HttpRequest):
 
     result_text = _call_mcp(body)
     if result_text:
-        queue.put(result_text)
+        msg_queue.put(result_text)
 
     return JsonResponse({"status": "queued"}, status=202)
 

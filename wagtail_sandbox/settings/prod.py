@@ -15,33 +15,53 @@ ALLOWED_HOSTS = [os.environ["VIRTUAL_HOST"]]
 
 SECRET_KEY = os.environ["RANDOM_SECRET_KEY"]
 
-# CSRF for the public domain
 CSRF_TRUSTED_ORIGINS = [
     f"https://{os.environ['VIRTUAL_HOST']}",
 ]
 
+# Wagtail admin / API absolute URLs
+WAGTAILADMIN_BASE_URL = f"https://{os.environ['VIRTUAL_HOST']}"
+WAGTAILAPI_BASE_URL = f"https://{os.environ['VIRTUAL_HOST']}"
+
 # Built-in email sending service provided by CodeRed Cloud.
 EMAIL_BACKEND = "cr_sendmail.backends.SendmailBackend"
 
-# MySQL (default on CodeRed). Requires SSL + utf8mb4.
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.mysql",
-        "HOST": os.environ["DB_HOST"],
-        "NAME": os.environ["DB_NAME"],
-        "USER": os.environ["DB_USER"],
-        "PASSWORD": os.environ["DB_PASSWORD"],
-        "OPTIONS": {
-            "ssl": {},
-            "charset": "utf8mb4",
-        },
+# Database: CodeRed provides MySQL or PostgreSQL via the same DB_* env vars.
+# Default is MySQL (matches CodeRed demo). If your site uses PostgreSQL,
+# set DB_ENGINE=django.db.backends.postgresql in CodeRed dashboard env vars.
+_db_engine = os.environ.get("DB_ENGINE", "django.db.backends.mysql")
+
+if _db_engine.endswith("postgresql") or _db_engine.endswith("postgresql_psycopg2"):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "HOST": os.environ["DB_HOST"],
+            "NAME": os.environ["DB_NAME"],
+            "USER": os.environ["DB_USER"],
+            "PASSWORD": os.environ["DB_PASSWORD"],
+            "OPTIONS": {
+                "client_encoding": "UTF8",
+                "sslmode": "require",
+            },
+        }
     }
-}
+else:
+    # MySQL (default)
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.mysql",
+            "HOST": os.environ["DB_HOST"],
+            "NAME": os.environ["DB_NAME"],
+            "USER": os.environ["DB_USER"],
+            "PASSWORD": os.environ["DB_PASSWORD"],
+            "OPTIONS": {
+                "charset": "utf8mb4",
+                "ssl": {"ssl_mode": "REQUIRED"},
+            },
+        }
+    }
 
-# CodeRed serves static/media itself; keep standard paths from base.py.
-# Do NOT force WhiteNoise here — CodeRed wires its own static server.
-
-# Logging to CodeRed's /log directory (visible via SFTP)
+# Logging to CodeRed /log (visible via SFTP). Fall back to console if path missing.
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -51,6 +71,10 @@ LOGGING = {
         },
     },
     "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
         "file": {
             "class": "logging.FileHandler",
             "filename": "/log/django.log",
@@ -60,7 +84,7 @@ LOGGING = {
     "loggers": {
         "": {
             "level": "INFO",
-            "handlers": ["file"],
+            "handlers": ["console", "file"],
         },
     },
 }

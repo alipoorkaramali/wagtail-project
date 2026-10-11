@@ -6,7 +6,11 @@ import sys
 
 def main():
     """Run administrative tasks."""
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "wagtail_sandbox.settings.dev")
+    # CodeRed sets DJANGO_SETTINGS_MODULE; fall back to prod when VIRTUAL_HOST is set
+    if os.environ.get("VIRTUAL_HOST"):
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "wagtail_sandbox.settings.prod")
+    else:
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "wagtail_sandbox.settings.dev")
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

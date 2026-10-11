@@ -15,6 +15,7 @@ BASE_DIR = PROJECT_DIR.parent
 INSTALLED_APPS = [
     "home",
     "search",
+    "mcp_bridge",
     "wagtail.contrib.forms",
     "wagtail.contrib.redirects",
     "wagtail.embeds",
@@ -134,3 +135,8 @@ WAGTAILDOCS_EXTENSIONS = [
     "csv", "docx", "key", "odt", "pdf", "pptx", "rtf", "txt", "xlsx", "zip",
 ]
 WAGTAILDOCS_MAX_UPLOAD_SIZE = 10 * 1024 * 1024
+
+# --- MCP bridge (Grok connector: URL only, token injected server-side) ---
+MCP_TOKEN = os.environ.get("MCP_TOKEN", "")
+MCP_TARGET_URL = os.environ.get("MCP_TARGET_URL", "")
+MCP_PUBLIC_URL = os.environ.get("MCP_PUBLIC_URL", "")

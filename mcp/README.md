@@ -1,78 +1,40 @@
-# MCP Universal Bridge
+# MCP Bridge
 
-A small FastAPI service that makes `wagtail-mcp` usable from any
-MCP client, regardless of which transport they support.
+## Preferred setup (CodeRed — no extra account)
 
-## Why does this exist?
+The **in-app** bridge lives in the Django app `mcp_bridge` and is served on the same site:
 
-`wagtail-mcp` speaks **StreamableHTTP**. Some clients (like Grok's
-current web connector) only support the older **SSE** transport.
-This bridge accepts **both** and forwards everything to `wagtail-mcp`.
+| URL | Purpose |
+|-----|--------|
+| `https://wagtail-sandbox.codered.cloud/sse` | Grok custom connector (SSE) |
+| `https://wagtail-sandbox.codered.cloud/messages/` | SSE message intake |
+| `https://wagtail-sandbox.codered.cloud/mcp-bridge/health` | Health check |
+| `https://wagtail-sandbox.codered.cloud/mcp/` | Native wagtail-mcp (needs Bearer token) |
 
-```
-Grok ──SSE──▶ Bridge ──StreamableHTTP──▶ wagtail-mcp (Django)
-│
-└── StreamableHTTP ──▶ wagtail-mcp (passthrough)
-```
+### Setup
 
-## Endpoints
+1. In **CodeRed Cloud** dashboard → your site → **Environment variables**, add:
 
-| Path | Method | Purpose |
-|------|--------|---------|
-| `/` | GET | Health check + stats |
-| `/health` | GET | Same as `/` |
-| `/mcp` | POST/GET/DELETE | StreamableHTTP passthrough |
-| `/mcp/` | POST/GET/DELETE | Same, with trailing slash |
-| `/sse` | GET | SSE session (legacy transport) |
-| `/messages/` | POST | SSE message intake |
-| `/messages` | POST | Same, without trailing slash |
+   - `MCP_TOKEN` = your Wagtail API token (`wagtail_...`)
 
-## Environment variables
+2. Deploy the site (GitHub Actions → **Deploy to CodeRed Cloud** → Run workflow).
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `MCP_TOKEN` | ✅ | — | Wagtail API token (starts with `wagtail_`) |
-| `MCP_TARGET_URL` | | `http://127.0.0.1:8000/mcp/` | Where wagtail-mcp lives |
-| `MCP_PUBLIC_URL` | | auto-detect | Public URL of this bridge |
-| `PORT` / `MCP_PORT` | | `8002` | Port to listen on |
-| `MCP_HOST` | | `0.0.0.0` | Host to bind |
-| `MCP_SESSION_TIMEOUT` | | `600` | Idle session timeout (seconds) |
+3. In Grok → [connectors](https://grok.com/connectors) → **Custom**:
 
-## Local development
+   - **Name:** e.g. `Wagtail Sandbox`
+   - **URL:** `https://wagtail-sandbox.codered.cloud/sse`
 
-```bash
-# 1. Activate the venv that has fastapi + uvicorn + httpx
-# 2. Set the environment
-export MCP_TOKEN=wagtail_your_token_here
-export MCP_TARGET_URL=http://127.0.0.1:8000/mcp/
-export MCP_PUBLIC_URL=https://your-ngrok-url.ngrok-free.dev
+No ngrok, no Render, no laptop terminal.
 
-# 3. Run
-python bridge.py
-```
+### Security note
 
-## Cloud deployment (Render)
+`/sse` does not ask Grok for a token; the server injects `MCP_TOKEN`.
+Anyone who knows the URL can use MCP tools with that token's permissions.
+Use a token with limited permissions on production sites.
 
-1. Create a new **Web Service** on Render
-2. Point it at this repository, **Root Directory = `mcp`**
-3. Build command: `pip install -r requirements.txt`
-4. Start command: `uvicorn bridge:app --host 0.0.0.0 --port $PORT`
-5. Add environment variables:
+---
 
-- `MCP_TOKEN` = your Wagtail token
-- `MCP_TARGET_URL` = `https://your-django-app.onrender.com/mcp/`
-- `MCP_PUBLIC_URL` = `https://your-bridge.onrender.com`
-6. Deploy
+## Standalone FastAPI bridge (optional)
 
-The public URL for Grok is: `https://your-bridge.onrender.com/sse`
-
-## Verifying it works
-
-```bash
-# Local test
-curl -N http://127.0.0.1:8002/sse
-
-# Should print:
-# event: endpoint
-# data: /messages/?session_id=...
-```
+The files in this folder (`bridge.py`) are an optional separate service
+for local/ngrok or Render. Prefer the in-app Django bridge above.

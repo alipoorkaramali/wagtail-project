@@ -15,6 +15,8 @@ urlpatterns = [
     path("documents/", include(wagtaildocs_urls)),
     path("api/v3/", api_v3.urls),
     path("mcp/", include("wagtail_mcp.urls")),
+    # Grok / SSE bridge (injects MCP_TOKEN server-side — no token in connector UI)
+    path("", include("mcp_bridge.urls")),
     path("search/", search_views.search, name="search"),
 ]
 

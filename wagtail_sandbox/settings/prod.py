@@ -23,6 +23,20 @@ CSRF_TRUSTED_ORIGINS = [
 WAGTAILADMIN_BASE_URL = f"https://{os.environ['VIRTUAL_HOST']}"
 WAGTAILAPI_BASE_URL = f"https://{os.environ['VIRTUAL_HOST']}"
 
+# Expose host for MCP bridge defaults
+VIRTUAL_HOST = os.environ["VIRTUAL_HOST"]
+
+# MCP bridge: token from CodeRed env; public URL defaults to this site
+MCP_TOKEN = os.environ.get("MCP_TOKEN", "")
+MCP_PUBLIC_URL = os.environ.get(
+    "MCP_PUBLIC_URL",
+    f"https://{os.environ['VIRTUAL_HOST']}",
+)
+MCP_TARGET_URL = os.environ.get(
+    "MCP_TARGET_URL",
+    f"https://{os.environ['VIRTUAL_HOST']}/mcp/",
+)
+
 # Built-in email sending service provided by CodeRed Cloud.
 EMAIL_BACKEND = "cr_sendmail.backends.SendmailBackend"
 

@@ -1,5 +1,7 @@
 # =============================================================================
 #  Deploy to CodeRed Cloud - Full CI/CD Pipeline
+#  - push / PR: فقط Lint + Test
+#  - دیپلوی فقط با تایید دستی (Actions → Run workflow)
 # =============================================================================
 
 name: Deploy to CodeRed Cloud
@@ -8,7 +10,6 @@ on:
   push:
     branches: [main, develop]
     paths-ignore:
-      # فقط تغییر ورک‌فلوها نباید دیپلوی جدید بزند
       - '.github/workflows/**'
   pull_request:
     branches: [main, develop]
@@ -105,9 +106,10 @@ jobs:
     name: "3. Deploy to CodeRed Cloud"
     runs-on: ubuntu-latest
     needs: [lint, test]
+    # فقط وقتی خودت از تب Actions روی Run workflow بزنی
     if: |
-      github.ref == 'refs/heads/main' &&
-      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main'
     environment:
       name: production
       url: https://wagtail-sandbox.codered.cloud/

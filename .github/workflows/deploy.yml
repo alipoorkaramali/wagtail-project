@@ -1,13 +1,5 @@
 # =============================================================================
 #  Deploy to CodeRed Cloud - Full CI/CD Pipeline
-#  Repo: https://github.com/alipoorkaramali/wagtail-project
-#
-#  Stages:
-#    1. Lint      - Ruff (fast Python linter)
-#    2. Test      - Django/Wagtail tests + coverage
-#    3. Deploy    - Push to CodeRed Cloud (only on main branch)
-#
-#  Required Secret: cr_token  (CodeRed Cloud API key)
 # =============================================================================
 
 name: Deploy to CodeRed Cloud
@@ -17,7 +9,7 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
-  workflow_dispatch:  # allow manual trigger from GitHub UI
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -60,6 +52,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Install system deps (mysqlclient)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y default-libmysqlclient-dev pkg-config build-essential
 
       - name: Set up Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v5
@@ -105,7 +102,6 @@ jobs:
     name: "3. Deploy to CodeRed Cloud"
     runs-on: ubuntu-latest
     needs: [lint, test]
-    # Deploy on push to main OR manual workflow_dispatch on main
     if: |
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
@@ -120,25 +116,20 @@ jobs:
         run: |
           if [ -z "${{ secrets.cr_token }}" ]; then
             echo "::error::Secret 'cr_token' is not set in repository settings."
-            echo "Go to: Settings → Secrets and variables → Actions → New repository secret"
             exit 1
           fi
           echo "✅ Secret 'cr_token' is available."
 
       - name: Install CodeRed CLI
         run: |
-          echo "==> Downloading cr-linux..."
           wget -nv -O /usr/local/bin/cr "https://www.codered.cloud/cli/cr-linux"
           chmod +x /usr/local/bin/cr
-          echo "==> Verifying installation..."
           cr --version
 
       - name: Verify token works
         env:
           CR_TOKEN: ${{ secrets.cr_token }}
-        run: |
-          echo "==> Listing sites (verifying token)..."
-          cr list
+        run: cr list
 
       - name: Deploy
         env:
@@ -146,30 +137,15 @@ jobs:
         run: |
           echo "==> Deploying site: wagtail-sandbox"
           echo "==> Commit: ${{ github.sha }}"
-          echo "==> Branch: ${{ github.ref_name }}"
-          echo "==> Author: ${{ github.actor }}"
           printf '1\n' | cr deploy wagtail-sandbox || printf '2\n' | cr deploy wagtail-sandbox
 
       - name: Deployment summary
         if: success()
         run: |
           echo "## ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| Site | wagtail-sandbox |" >> $GITHUB_STEP_SUMMARY
-          echo "| URL | https://wagtail-sandbox.codered.cloud/ |" >> $GITHUB_STEP_SUMMARY
-          echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Branch | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Triggered by | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Site | https://wagtail-sandbox.codered.cloud/ |" >> $GITHUB_STEP_SUMMARY
 
       - name: Failure summary
         if: failure()
         run: |
           echo "## ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Check the logs above. Common causes:" >> $GITHUB_STEP_SUMMARY
-          echo "- Invalid or missing \`cr_token\` secret" >> $GITHUB_STEP_SUMMARY
-          echo "- Site handle typo (should be \`wagtail-sandbox\`)" >> $GITHUB_STEP_SUMMARY
-          echo "- Missing settings/prod.py or project name mismatch" >> $GITHUB_STEP_SUMMARY
-          echo "- Code errors not caught by tests" >> $GITHUB_STEP_SUMMARY

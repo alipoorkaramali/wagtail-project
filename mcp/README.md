@@ -10,11 +10,9 @@ current web connector) only support the older **SSE** transport.
 This bridge accepts **both** and forwards everything to `wagtail-mcp`.
 
 ```
-
 Grok ──SSE──▶ Bridge ──StreamableHTTP──▶ wagtail-mcp (Django)
 │
 └── StreamableHTTP ──▶ wagtail-mcp (passthrough)
-
 ```
 
 ## Endpoints
@@ -45,9 +43,9 @@ Grok ──SSE──▶ Bridge ──StreamableHTTP──▶ wagtail-mcp (Django
 ```bash
 # 1. Activate the venv that has fastapi + uvicorn + httpx
 # 2. Set the environment
-set MCP_TOKEN=wagtail_your_token_here
-set MCP_TARGET_URL=http://127.0.0.1:8000/mcp/
-set MCP_PUBLIC_URL=https://your-ngrok-url.ngrok-free.dev
+export MCP_TOKEN=wagtail_your_token_here
+export MCP_TARGET_URL=http://127.0.0.1:8000/mcp/
+export MCP_PUBLIC_URL=https://your-ngrok-url.ngrok-free.dev
 
 # 3. Run
 python bridge.py
@@ -70,7 +68,7 @@ The public URL for Grok is: `https://your-bridge.onrender.com/sse`
 
 ## Verifying it works
 
-```
+```bash
 # Local test
 curl -N http://127.0.0.1:8002/sse
 
@@ -78,63 +76,3 @@ curl -N http://127.0.0.1:8002/sse
 # event: endpoint
 # data: /messages/?session_id=...
 ```
-
-</BDS:create_file>
-
-<BDS:create_file fileName="render.yaml">
-
-```yaml
-# Render Blueprint — deploys both services at once
-# Docs: https://render.com/docs/blueprint-spec
-
-services:
-  # ---------- Service 1: Django + Wagtail + wagtail-mcp ----------
-  - type: web
-    name: wagtail-mcp-app
-    runtime: python
-    plan: free
-    buildCommand: |
-      pip install -r requirements.txt
-      python manage.py collectstatic --noinput
-      python manage.py migrate --noinput
-    startCommand: gunicorn mysite.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.12.7
-      - key: DJANGO_SETTINGS_MODULE
-        value: mysite.settings.production
-      - key: SECRET_KEY
-        generateValue: true
-      - key: DEBUG
-        value: "False"
-      - key: ALLOWED_HOSTS
-        value: ".onrender.com"
-      - key: DATABASE_URL
-        fromDatabase:
-          name: wagtail-mcp-db
-          property: connectionString
-
-  # ---------- Service 2: MCP Bridge ----------
-  - type: web
-    name: wagtail-mcp-bridge
-    runtime: python
-    plan: free
-    rootDir: mcp
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn bridge:app --host 0.0.0.0 --port $PORT
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.12.7
-      - key: MCP_TOKEN
-        sync: false               # set manually in Render UI
-      - key: MCP_TARGET_URL
-        value: "https://wagtail-mcp-app.onrender.com/mcp/"
-      - key: MCP_PUBLIC_URL
-        value: "https://wagtail-mcp-bridge.onrender.com"
-
-databases:
-  - name: wagtail-mcp-db
-    plan: free
-    databaseName: wagtail
-    user: wagtail
-

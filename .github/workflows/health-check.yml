@@ -1,0 +1,78 @@
+# =============================================================================
+#  Health Check - بعد از هر Deploy، سایت رو تست می‌کنه
+#  اگه سایت کد 5xx بده، Issue باز می‌کنه
+# =============================================================================
+
+name: Health Check
+
+on:
+  # بعد از هر Deploy موفق اجرا می‌شه
+  workflow_run:
+    workflows: ["Deploy to CodeRed Cloud"]
+    types: [completed]
+  # و هر ۶ ساعت یه بار خودکار
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: "Check site health"
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Ping site
+        id: ping
+        run: |
+          echo "==> Checking https://wagtail-sandbox.codered.cloud/"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 https://wagtail-sandbox.codered.cloud/ || echo "000")
+          echo "HTTP status: $STATUS"
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          
+          if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 400 ]; then
+            echo "✅ Site is healthy"
+            exit 0
+          else
+            echo "❌ Site returned $STATUS"
+            exit 1
+          fi
+
+      - name: Create issue on failure
+        if: failure() && github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ steps.ping.outputs.status }}';
+            const title = `🚨 Site is DOWN (HTTP ${status})`;
+            const body = [
+              `Automated health check failed.`,
+              ``,
+              `- **Status code**: ${status}`,
+              `- **URL**: https://wagtail-sandbox.codered.cloud/`,
+              `- **Time**: ${new Date().toISOString()}`,
+              ``,
+              `### Debug steps`,
+              `1. Check recent deploys: \`cr logs -s wagtail-sandbox\``,
+              `2. Verify with: \`curl -I https://wagtail-sandbox.codered.cloud/\``,
+              `3. If needed, rollback: use the "Rollback Deployment" workflow`,
+            ].join('\n');
+
+            // Check if an open issue already exists
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'health-check',
+            });
+
+            if (issues.data.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['health-check', 'bug'],
+              });
+            } else {
+              console.log('Open health-check issue already exists, skipping.');
+            }

@@ -1,0 +1,59 @@
+# =============================================================================
+#  Rollback - Deploy a previous commit
+#  به‌صورت دستی: روی تب Actions، Run workflow، SHA یا tag رو وارد کن
+# =============================================================================
+
+name: Rollback Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to deploy (commit SHA, tag, or branch)"
+        required: true
+        default: "HEAD~1"
+      site:
+        description: "CodeRed site handle"
+        required: true
+        default: "wagtail-sandbox"
+
+jobs:
+  rollback:
+    name: "Rollback to ${{ github.event.inputs.ref }}"
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://wagtail-sandbox.codered.cloud/
+    steps:
+      - name: Checkout the specified ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref }}
+
+      - name: Show what will be deployed
+        run: |
+          echo "==> Deploying ref: ${{ github.event.inputs.ref }}"
+          echo "==> Site: ${{ github.event.inputs.site }}"
+          echo ""
+          echo "==> Latest commits:"
+          git log --oneline -5
+
+      - name: Install cr CLI
+        run: |
+          wget -nv -O /usr/local/bin/cr "https://www.codered.cloud/cli/cr-linux"
+          chmod +x /usr/local/bin/cr
+
+      - name: Deploy
+        env:
+          CR_TOKEN: ${{ secrets.cr_token }}
+        run: |
+          cr deploy ${{ github.event.inputs.site }}
+
+      - name: Summary
+        run: |
+          echo "## ⏪ Rollback Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Ref | \`${{ github.event.inputs.ref }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Site | ${{ github.event.inputs.site }} |" >> $GITHUB_STEP_SUMMARY

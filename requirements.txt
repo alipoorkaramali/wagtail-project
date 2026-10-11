@@ -1,10 +1,11 @@
 # ============================================================
 #  Main requirements for Wagtail + wagtail-mcp (CodeRed Cloud)
+#  CodeRed MySQL is 8.0.x → Django must be <6.0 (6.1 needs MySQL 8.4+)
 # ============================================================
 
 # --- Core ---
-Django>=5.2,<6.2
-wagtail>=6.0,<9.0
+Django>=5.2,<6.0
+wagtail>=6.0,<8.0
 
 # --- CodeRed Cloud ---
 mysqlclient

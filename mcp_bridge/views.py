@@ -1,16 +1,12 @@
 """
-In-process MCP bridge for Grok and other clients that only send a URL
-(no Bearer token in the connector UI).
+In-process MCP bridge for Grok (URL-only connector, no Bearer in UI).
 
-Flow:
-  Grok ──GET /sse──▶ this app ──(+ MCP_TOKEN)──▶ /mcp/  (same process, no HTTP)
+Grok ──GET /sse──▶ bridge ──(+ MCP_TOKEN)──▶ /mcp/  (same Django process)
 
-Uses Django's test Client so we never open a second network request to
-our own public URL (that caused worker deadlock / CR504 on CodeRed).
-
-Environment / settings:
-  MCP_TOKEN       required — Wagtail API token (wagtail_...)
-  MCP_PUBLIC_URL  optional — default https://{VIRTUAL_HOST}
+IMPORTANT on CodeRed (few WSGI workers):
+  A long-lived SSE stream holds one worker for the whole connection.
+  We hard-cap session length and concurrent streams so the site
+  cannot stay offline (CR504) when Grok or bots open /sse.
 """
 from __future__ import annotations
 
@@ -28,10 +24,14 @@ from django.views.decorators.http import require_GET, require_POST
 
 logger = logging.getLogger(__name__)
 
-# In-memory SSE sessions (fine for single-worker CodeRed plans).
 _sessions: dict[str, Queue] = {}
-_SESSION_TTL = 600
 _session_touch: dict[str, float] = {}
+
+# Keep CodeRed responsive: short streams, few concurrent sessions.
+_SESSION_TTL = 90
+_MAX_SSE_SECONDS = 45
+_MAX_CONCURRENT_SSE = 1
+_PING_EVERY = 5
 
 
 def _token() -> str:
@@ -54,8 +54,13 @@ def _cleanup_stale() -> None:
     now = time.time()
     stale = [sid for sid, ts in _session_touch.items() if now - ts > _SESSION_TTL]
     for sid in stale:
-        _sessions.pop(sid, None)
+        q = _sessions.pop(sid, None)
         _session_touch.pop(sid, None)
+        if q is not None:
+            try:
+                q.put_nowait(None)
+            except Exception:
+                pass
 
 
 def _call_mcp(body: dict) -> str:
@@ -117,12 +122,21 @@ def _call_mcp(body: dict) -> str:
 @csrf_exempt
 @require_GET
 def sse(request: HttpRequest):
-    """Legacy MCP SSE transport — Grok connects here with only a URL."""
+    """Legacy MCP SSE — capped so it cannot monopolize CodeRed workers."""
     _cleanup_stale()
     token = _token()
     if not token:
         return JsonResponse(
             {"error": "MCP_TOKEN is not set. Add it in CodeRed environment variables."},
+            status=503,
+        )
+
+    if len(_sessions) >= _MAX_CONCURRENT_SSE:
+        return JsonResponse(
+            {
+                "error": "SSE capacity full",
+                "detail": "Another MCP session is active. Retry in under a minute.",
+            },
             status=503,
         )
 
@@ -137,10 +151,11 @@ def sse(request: HttpRequest):
 
     def event_stream():
         yield f"event: endpoint\ndata: {endpoint_url}\n\n"
+        deadline = time.time() + _MAX_SSE_SECONDS
         try:
-            while True:
+            while time.time() < deadline:
                 try:
-                    msg = msg_queue.get(timeout=25)
+                    msg = msg_queue.get(timeout=_PING_EVERY)
                 except Empty:
                     yield ": ping\n\n"
                     continue
@@ -165,7 +180,7 @@ def sse(request: HttpRequest):
 @csrf_exempt
 @require_POST
 def messages(request: HttpRequest):
-    """SSE message intake — client posts JSON-RPC; we forward to /mcp/ in-process."""
+    """SSE message intake — JSON-RPC → /mcp/ in-process."""
     session_id = request.GET.get("session_id")
     if not session_id:
         return JsonResponse({"error": "missing session_id"}, status=400)
@@ -202,6 +217,8 @@ def health(request: HttpRequest):
             "sessions": len(_sessions),
             "token_configured": bool(_token()),
             "target": "in-process:/mcp/",
+            "sse_max_seconds": _MAX_SSE_SECONDS,
+            "sse_max_concurrent": _MAX_CONCURRENT_SSE,
             "public_url": getattr(settings, "MCP_PUBLIC_URL", None) or None,
         }
     )

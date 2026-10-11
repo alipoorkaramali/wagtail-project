@@ -77,7 +77,6 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # Try common requirement files
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
@@ -116,7 +115,6 @@ jobs:
     name: "3. Deploy to CodeRed Cloud"
     runs-on: ubuntu-latest
     needs: [lint, test]
-    # Only deploy on main branch pushes (not on PR, not on develop)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment:
       name: production
@@ -157,7 +155,9 @@ jobs:
           echo "==> Commit: ${{ github.sha }}"
           echo "==> Branch: ${{ github.ref_name }}"
           echo "==> Author: ${{ github.actor }}"
-          cr deploy wagtail-sandbox
+          # Non-interactive: answer prompts with option 1 (recommended defaults)
+          # or 2 (continue) if any remaining interactive checks appear
+          printf '1\n' | cr deploy wagtail-sandbox || printf '2\n' | cr deploy wagtail-sandbox
 
       - name: Deployment summary
         if: success()
@@ -180,4 +180,5 @@ jobs:
           echo "Check the logs above. Common causes:" >> $GITHUB_STEP_SUMMARY
           echo "- Invalid or missing \`cr_token\` secret" >> $GITHUB_STEP_SUMMARY
           echo "- Site handle typo (should be \`wagtail-sandbox\`)" >> $GITHUB_STEP_SUMMARY
+          echo "- Missing settings/prod.py or project name mismatch" >> $GITHUB_STEP_SUMMARY
           echo "- Code errors not caught by tests" >> $GITHUB_STEP_SUMMARY

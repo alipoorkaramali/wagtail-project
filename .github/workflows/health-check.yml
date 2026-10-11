@@ -24,18 +24,33 @@ jobs:
       - name: Ping site
         id: ping
         run: |
-          echo "==> Checking https://wagtail-sandbox.codered.cloud/"
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 https://wagtail-sandbox.codered.cloud/ || echo "000")
-          echo "HTTP status: $STATUS"
-          echo "status=$STATUS" >> $GITHUB_OUTPUT
-          
-          if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 400 ]; then
-            echo "✅ Site is healthy"
-            exit 0
-          else
-            echo "❌ Site returned $STATUS"
-            exit 1
-          fi
+          URL="https://wagtail-sandbox.codered.cloud/"
+          echo "==> Checking $URL"
+
+          # بعد از دیپلوی سایت ممکنه چند ثانیه 502 بده؛ چند بار با فاصله تلاش می‌کنیم
+          MAX_ATTEMPTS=8
+          SLEEP_SECONDS=15
+          STATUS="000"
+
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$URL" || echo "000")
+            echo "Attempt $i/$MAX_ATTEMPTS — HTTP status: $STATUS"
+
+            if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 400 ]; then
+              echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+              echo "✅ Site is healthy"
+              exit 0
+            fi
+
+            if [ "$i" -lt "$MAX_ATTEMPTS" ]; then
+              echo "Not ready yet (got $STATUS). Waiting ${SLEEP_SECONDS}s before retry..."
+              sleep "$SLEEP_SECONDS"
+            fi
+          done
+
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          echo "❌ Site returned $STATUS after $MAX_ATTEMPTS attempts"
+          exit 1
 
       - name: Create issue on failure
         if: failure() && github.event_name == 'schedule'

@@ -7,6 +7,9 @@ name: Deploy to CodeRed Cloud
 on:
   push:
     branches: [main, develop]
+    paths-ignore:
+      # فقط تغییر ورک‌فلوها نباید دیپلوی جدید بزند
+      - '.github/workflows/**'
   pull_request:
     branches: [main, develop]
   workflow_dispatch:

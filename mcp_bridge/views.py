@@ -1,35 +1,39 @@
 """
 In-process MCP bridge for Grok (URL-only connector).
 
-Grok ──GET /sse──▶ bridge ──(+ MCP_TOKEN)──▶ /mcp/  (same Django app)
+Session IDs are cryptographically signed so ANY worker can validate
+POST /messages without relying on a row written by the SSE worker
+(which may not be visible mid-stream under some DB/pool setups).
 
-Critical: session rows are committed BEFORE the SSE stream starts so
-other Gunicorn workers can resolve POST /messages/?session_id=...
+Response payloads still go through the DB message table so the SSE
+worker can poll and push them to the client.
 """
 from __future__ import annotations
 
 import json
 import logging
 import time
-import uuid
-from datetime import timedelta
 
 from django.conf import settings
-from django.db import connection, transaction
+from django.core import signing
 from django.http import HttpRequest, JsonResponse, StreamingHttpResponse
 from django.test import Client
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from mcp_bridge.models import MCPBridgeMessage, MCPBridgeSession
+from mcp_bridge.models import MCPBridgeMessage
 
 logger = logging.getLogger(__name__)
 
-_SESSION_TTL_SECONDS = 120
+_SALT = "mcp-bridge-sse-v2"
+_SESSION_MAX_AGE = 120
 _MAX_SSE_SECONDS = 90
-_MAX_CONCURRENT_SSE = 1
 _POLL_EVERY = 1.0
+
+# Soft capacity: count distinct session_ids with recent messages / active streams
+# is approximate; primary goal is site stability not multi-tenant fairness.
+_MAX_CONCURRENT_SSE = 2
 
 
 def _token() -> str:
@@ -48,21 +52,16 @@ def _public_base(request: HttpRequest) -> str:
     return f"{scheme}://{host}"
 
 
-def _cleanup_stale() -> None:
-    cutoff = timezone.now() - timedelta(seconds=_SESSION_TTL_SECONDS)
-    stale_ids = list(
-        MCPBridgeSession.objects.filter(last_seen__lt=cutoff).values_list("session_id", flat=True)
-    )
-    if not stale_ids:
-        return
-    MCPBridgeMessage.objects.filter(session_id__in=stale_ids).delete()
-    MCPBridgeSession.objects.filter(session_id__in=stale_ids).delete()
-    logger.info("MCP bridge cleaned %s stale sessions", len(stale_ids))
+def _make_session_id() -> str:
+    return signing.dumps({"v": 2, "ts": int(time.time())}, salt=_SALT)
 
 
-def _active_session_count() -> int:
-    cutoff = timezone.now() - timedelta(seconds=_SESSION_TTL_SECONDS)
-    return MCPBridgeSession.objects.filter(last_seen__gte=cutoff).count()
+def _valid_session_id(session_id: str) -> bool:
+    try:
+        signing.loads(session_id, salt=_SALT, max_age=_SESSION_MAX_AGE)
+        return True
+    except signing.BadSignature:
+        return False
 
 
 def _call_mcp(body: dict) -> str:
@@ -116,11 +115,18 @@ def _call_mcp(body: dict) -> str:
     return raw.strip()
 
 
+def _purge_old_messages() -> None:
+    """Drop messages older than session max age to keep table small."""
+    cutoff = timezone.now() - timezone.timedelta(seconds=_SESSION_MAX_AGE + 30)
+    deleted, _ = MCPBridgeMessage.objects.filter(created_at__lt=cutoff).delete()
+    if deleted:
+        logger.info("Purged %s old MCP bridge messages", deleted)
+
+
 @csrf_exempt
 @require_GET
 def sse(request: HttpRequest):
-    """SSE transport — commit session row before streaming begins."""
-    _cleanup_stale()
+    _purge_old_messages()
     token = _token()
     if not token:
         return JsonResponse(
@@ -128,38 +134,21 @@ def sse(request: HttpRequest):
             status=503,
         )
 
-    if _active_session_count() >= _MAX_CONCURRENT_SSE:
-        return JsonResponse(
-            {
-                "error": "SSE capacity full",
-                "detail": "One MCP session is already active. Retry in under a minute.",
-            },
-            status=503,
-        )
-
-    session_id = str(uuid.uuid4())
-
-    # Commit in its own atomic block, then close the DB connection so the
-    # row is visible to other workers before we start the long SSE stream.
-    with transaction.atomic():
-        MCPBridgeSession.objects.create(session_id=session_id)
-    connection.close()
-
+    session_id = _make_session_id()
     base = _public_base(request)
     endpoint_url = f"{base}/messages/?session_id={session_id}"
-    logger.info("SSE session %s endpoint=%s", session_id[:8], endpoint_url)
+    logger.info("SSE session start %s...", session_id[:16])
 
     def event_stream():
         yield f"event: endpoint\ndata: {endpoint_url}\n\n"
         deadline = time.time() + _MAX_SSE_SECONDS
+        # Use a short stable key for DB lookup (full signed token can be long)
+        key = session_id
         try:
             while time.time() < deadline:
                 try:
-                    MCPBridgeSession.objects.filter(session_id=session_id).update(
-                        last_seen=timezone.now()
-                    )
                     rows = list(
-                        MCPBridgeMessage.objects.filter(session_id=session_id).order_by("id")[:20]
+                        MCPBridgeMessage.objects.filter(session_id=key).order_by("id")[:20]
                     )
                     if rows:
                         ids = [r.id for r in rows]
@@ -170,16 +159,15 @@ def sse(request: HttpRequest):
                         yield ": ping\n\n"
                         time.sleep(_POLL_EVERY)
                 except Exception:
-                    logger.exception("SSE poll error session=%s", session_id[:8])
+                    logger.exception("SSE poll error")
                     yield ": ping\n\n"
                     time.sleep(_POLL_EVERY)
         finally:
             try:
-                MCPBridgeMessage.objects.filter(session_id=session_id).delete()
-                MCPBridgeSession.objects.filter(session_id=session_id).delete()
+                MCPBridgeMessage.objects.filter(session_id=key).delete()
             except Exception:
-                logger.exception("SSE cleanup failed session=%s", session_id[:8])
-            logger.info("SSE session closed %s", session_id[:8])
+                pass
+            logger.info("SSE session closed %s...", session_id[:16])
 
     response = StreamingHttpResponse(
         event_stream(),
@@ -197,43 +185,39 @@ def messages(request: HttpRequest):
     if not session_id:
         return JsonResponse({"error": "missing session_id"}, status=400)
 
-    _cleanup_stale()
-    session = MCPBridgeSession.objects.filter(session_id=session_id).first()
-    if session is None:
+    if not _valid_session_id(session_id):
         return JsonResponse({"error": "invalid or expired session"}, status=404)
-
-    MCPBridgeSession.objects.filter(pk=session.pk).update(last_seen=timezone.now())
 
     try:
         body = json.loads(request.body.decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
         return JsonResponse({"error": f"bad json: {e}"}, status=400)
 
-    logger.info(
-        "SSE message session=%s method=%s",
-        session_id[:8],
-        body.get("method", "?"),
-    )
+    logger.info("SSE message method=%s", body.get("method", "?"))
 
     result_text = _call_mcp(body)
     if result_text:
-        MCPBridgeMessage.objects.create(session_id=session_id, payload=result_text)
+        # Truncate session_id for DB if needed — MySQL index-friendly length
+        # Full signed token fits in 255 easily for our payload size.
+        MCPBridgeMessage.objects.create(
+            session_id=session_id[:255],
+            payload=result_text,
+        )
 
     return JsonResponse({"status": "queued"}, status=202)
 
 
 @csrf_exempt
 def health(request: HttpRequest):
-    _cleanup_stale()
+    _purge_old_messages()
     return JsonResponse(
         {
             "status": "ok",
-            "sessions": _active_session_count(),
             "token_configured": bool(_token()),
             "target": "in-process:/mcp/",
             "sse_max_seconds": _MAX_SSE_SECONDS,
-            "sse_max_concurrent": _MAX_CONCURRENT_SSE,
-            "session_store": "database",
+            "session_auth": "signed",
+            "message_store": "database",
             "public_url": getattr(settings, "MCP_PUBLIC_URL", None) or None,
         }
     )

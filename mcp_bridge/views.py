@@ -1,9 +1,14 @@
 """
 MCP SSE bridge for Grok (URL-only connector).
 
-_call_mcp: RequestFactory + resolve, Accept application/json (no self-HTTP).
-SSE: closes DB connection while sleeping so other threads can use the pool.
-messages: runs MCP work then queues result (must complete on a free worker/thread).
+Paths:
+  GET  /sse              — legacy SSE session (Grok custom connector)
+  POST /messages/        — JSON-RPC in; result queued to SSE + returned in body
+  GET  /mcp-bridge/health
+
+_call_mcp uses RequestFactory (no self-HTTP deadlock).
+messages always returns the MCP payload in the HTTP body as a fallback when
+the SSE stream cannot deliver (single-worker / blocked stream cases).
 """
 from __future__ import annotations
 
@@ -227,8 +232,6 @@ def sse(request: HttpRequest):
                         MCPBridgeMessage.objects.filter(id__in=ids).delete()
                     else:
                         yield ": ping\n\n"
-                        # Release DB connection while sleeping so other
-                        # workers/threads can use the pool
                         connection.close()
                         time.sleep(_POLL_EVERY)
                 except Exception:
@@ -256,6 +259,13 @@ def sse(request: HttpRequest):
 @csrf_exempt
 @require_POST
 def messages(request: HttpRequest):
+    """
+    JSON-RPC intake.
+
+    Dual delivery:
+      1) Queue payload for the SSE stream (standard MCP-SSE protocol)
+      2) Also return the same payload in this HTTP response body (fallback)
+    """
     session_id = request.GET.get("session_id")
     if not session_id:
         return JsonResponse({"error": "missing session_id"}, status=400)
@@ -271,13 +281,33 @@ def messages(request: HttpRequest):
     logger.info("SSE message method=%s", body.get("method", "?"))
 
     result_text = _call_mcp(body)
-    if result_text:
-        MCPBridgeMessage.objects.create(
-            session_id=_msg_key(session_id),
-            payload=result_text,
-        )
 
-    return JsonResponse({"status": "queued"}, status=202)
+    # Path 1: SSE queue (primary for Grok SSE clients)
+    if result_text:
+        try:
+            MCPBridgeMessage.objects.create(
+                session_id=_msg_key(session_id),
+                payload=result_text,
+            )
+        except Exception:
+            logger.exception("Failed to queue MCP result for SSE")
+
+    # Path 2: HTTP body fallback — client can use this if SSE delivery fails
+    parsed = None
+    if result_text:
+        try:
+            parsed = json.loads(result_text)
+        except (json.JSONDecodeError, TypeError):
+            parsed = result_text
+
+    return JsonResponse(
+        {
+            "status": "ok",
+            "queued": True,
+            "result": parsed,
+        },
+        status=200,
+    )
 
 
 @csrf_exempt
@@ -288,9 +318,11 @@ def health(request: HttpRequest):
             "status": "ok",
             "token_configured": bool(_token()),
             "call_mode": "request_factory_json",
+            "delivery": ["sse_queue", "http_body_fallback"],
             "sse_max_seconds": _MAX_SSE_SECONDS,
             "session_auth": "signed",
             "message_store": "database",
             "public_url": getattr(settings, "MCP_PUBLIC_URL", None) or None,
+            "connector_url": f"{(getattr(settings, 'MCP_PUBLIC_URL', None) or '').rstrip('/')}/sse",
         }
     )

@@ -1,21 +1,25 @@
 """
-In-process MCP bridge for Grok (URL-only connector).
+MCP SSE bridge for Grok (URL-only connector).
 
-- Session IDs are signed tokens (any worker can validate).
-- Message queue keys are sha256(session_id) to fit DB varchar(64).
+Session IDs are signed (any worker validates). Message payloads use DB.
+_call_mcp talks to wagtail-mcp over real HTTP with a hard timeout —
+never Django's Test Client (nested client + gthread/SSE caused hangs).
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
+import os
 import time
+import urllib.error
+import urllib.request
 from datetime import timedelta
+from typing import List
 
 from django.conf import settings
 from django.core import signing
 from django.http import HttpRequest, JsonResponse, StreamingHttpResponse
-from django.test import Client
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
@@ -28,6 +32,7 @@ _SALT = "mcp-bridge-sse-v2"
 _SESSION_MAX_AGE = 120
 _MAX_SSE_SECONDS = 90
 _POLL_EVERY = 1.0
+_MCP_HTTP_TIMEOUT = 25  # seconds — fail fast so Grok does not hang forever
 
 
 def _token() -> str:
@@ -62,7 +67,45 @@ def _msg_key(session_id: str) -> str:
     return hashlib.sha256(session_id.encode("utf-8")).hexdigest()
 
 
+def _mcp_targets() -> List[str]:
+    """Ordered list of /mcp/ URLs to try (first success wins)."""
+    targets: List[str] = []
+    configured = (getattr(settings, "MCP_TARGET_URL", None) or "").strip()
+    if configured:
+        targets.append(configured if configured.endswith("/") else configured + "/")
+
+    port = os.environ.get("PORT") or os.environ.get("MCP_PORT") or "8000"
+    targets.append(f"http://127.0.0.1:{port}/mcp/")
+
+    public = (getattr(settings, "MCP_PUBLIC_URL", None) or "").rstrip("/")
+    if public:
+        targets.append(f"{public}/mcp/")
+
+    # de-dupe preserve order
+    seen = set()
+    unique = []
+    for t in targets:
+        if t not in seen:
+            seen.add(t)
+            unique.append(t)
+    return unique
+
+
+def _parse_mcp_body(raw: str, content_type: str) -> str:
+    ct = (content_type or "").lower()
+    if "text/event-stream" in ct:
+        chunks = []
+        for line in raw.splitlines():
+            if line.startswith("data:"):
+                payload = line[5:].strip()
+                if payload:
+                    chunks.append(payload)
+        return chunks[-1] if chunks else raw.strip()
+    return raw.strip()
+
+
 def _call_mcp(body: dict) -> str:
+    """POST JSON-RPC to wagtail-mcp via HTTP (timeout-bounded)."""
     token = _token()
     if not token:
         return json.dumps(
@@ -76,41 +119,60 @@ def _call_mcp(body: dict) -> str:
             }
         )
 
-    try:
-        client = Client()
-        response = client.post(
-            "/mcp/",
-            data=json.dumps(body),
-            content_type="application/json",
-            HTTP_AUTHORIZATION=f"Bearer {token}",
-            HTTP_ACCEPT="application/json, text/event-stream",
-        )
-    except Exception as e:
-        logger.exception("MCP in-process call failed")
-        return json.dumps(
-            {
-                "jsonrpc": "2.0",
-                "id": body.get("id"),
-                "error": {"code": -32603, "message": f"in-process error: {e}"},
-            }
-        )
+    payload = json.dumps(body).encode("utf-8")
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+    }
 
-    raw = response.content.decode("utf-8", errors="replace")
-    content_type = response.get("Content-Type", "") or ""
+    errors = []
+    for url in _mcp_targets():
+        try:
+            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=_MCP_HTTP_TIMEOUT) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+                ct = resp.headers.get("Content-Type", "")
+                status = getattr(resp, "status", 200)
+                if status >= 400:
+                    logger.warning("MCP HTTP %s from %s: %s", status, url, raw[:200])
+                    errors.append(f"{url} -> HTTP {status}")
+                    continue
+                result = _parse_mcp_body(raw, ct)
+                if result:
+                    logger.info("MCP OK via %s method=%s", url, body.get("method", "?"))
+                    return result
+                errors.append(f"{url} -> empty body")
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="replace")[:200]
+            logger.warning("MCP HTTPError %s %s: %s", e.code, url, err_body)
+            errors.append(f"{url} -> HTTP {e.code}")
+            # invalid token etc. — no point trying other targets with same token
+            if e.code in (401, 403):
+                return json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": body.get("id"),
+                        "error": {
+                            "code": -32001,
+                            "message": f"MCP auth failed ({e.code}): {err_body}",
+                        },
+                    }
+                )
+        except Exception as e:
+            logger.warning("MCP call failed %s: %s", url, e)
+            errors.append(f"{url} -> {type(e).__name__}: {e}")
 
-    if response.status_code >= 400:
-        logger.warning("MCP in-process HTTP %s: %s", response.status_code, raw[:300])
-
-    if content_type.startswith("text/event-stream"):
-        chunks = []
-        for line in raw.splitlines():
-            if line.startswith("data:"):
-                payload = line[5:].strip()
-                if payload:
-                    chunks.append(payload)
-        return chunks[-1] if chunks else raw
-
-    return raw.strip()
+    return json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": body.get("id"),
+            "error": {
+                "code": -32603,
+                "message": "MCP upstream failed: " + "; ".join(errors[:5]),
+            },
+        }
+    )
 
 
 def _purge_old_messages() -> None:
@@ -208,7 +270,9 @@ def health(request: HttpRequest):
         {
             "status": "ok",
             "token_configured": bool(_token()),
-            "target": "in-process:/mcp/",
+            "call_mode": "http",
+            "mcp_timeout_seconds": _MCP_HTTP_TIMEOUT,
+            "mcp_targets": _mcp_targets(),
             "sse_max_seconds": _MAX_SSE_SECONDS,
             "session_auth": "signed",
             "message_store": "database",

@@ -1,9 +1,9 @@
 """
 MCP SSE bridge for Grok (URL-only connector).
 
-_call_mcp uses RequestFactory + resolve (no self-HTTP deadlock).
-Accept: application/json so wagtail-mcp returns a finite body, not an
-open event-stream that never ends when consumed in-process.
+_call_mcp: RequestFactory + resolve, Accept application/json (no self-HTTP).
+SSE: closes DB connection while sleeping so other threads can use the pool.
+messages: runs MCP work then queues result (must complete on a free worker/thread).
 """
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.core import signing
+from django.db import connection
 from django.http import HttpRequest, JsonResponse, StreamingHttpResponse
 from django.test import RequestFactory
 from django.urls import resolve
@@ -84,15 +85,12 @@ def _consume_response(response) -> tuple[int, str, str]:
                     piece = str(chunk)
                 parts.append(piece)
                 total += len(piece)
-                # Stop early once we have a complete JSON object or SSE data line
                 joined = "".join(parts)
                 if total >= _MAX_BODY_BYTES:
                     break
                 if "text/event-stream" in (ct or "").lower():
-                    if "\ndata:" in joined or joined.startswith("data:"):
-                        # got at least one event; enough for single RPC reply
-                        if joined.count("\n\n") >= 1 or joined.count("\r\n\r\n") >= 1:
-                            break
+                    if joined.count("\n\n") >= 1 or joined.count("\r\n\r\n") >= 1:
+                        break
                 else:
                     s = joined.strip()
                     if s.startswith("{") and s.endswith("}"):
@@ -111,10 +109,7 @@ def _consume_response(response) -> tuple[int, str, str]:
         raw = "".join(parts)
     else:
         content = getattr(response, "content", b"") or b""
-        if isinstance(content, bytes):
-            raw = content.decode("utf-8", errors="replace")
-        else:
-            raw = str(content)
+        raw = content.decode("utf-8", errors="replace") if isinstance(content, bytes) else str(content)
     return status, raw, ct
 
 
@@ -147,7 +142,6 @@ def _call_mcp(body: dict) -> str:
 
     try:
         factory = RequestFactory()
-        # Prefer finite JSON body — avoid open-ended streamable responses
         request = factory.post(
             "/mcp/",
             data=json.dumps(body),
@@ -156,8 +150,7 @@ def _call_mcp(body: dict) -> str:
             HTTP_ACCEPT="application/json",
         )
         match = resolve("/mcp/")
-        view = match.func
-        response = view(request, *match.args, **match.kwargs)
+        response = match.func(request, *match.args, **match.kwargs)
         if not hasattr(response, "status_code") and callable(response):
             response = response(request)
         status, raw, ct = _consume_response(response)
@@ -234,9 +227,13 @@ def sse(request: HttpRequest):
                         MCPBridgeMessage.objects.filter(id__in=ids).delete()
                     else:
                         yield ": ping\n\n"
+                        # Release DB connection while sleeping so other
+                        # workers/threads can use the pool
+                        connection.close()
                         time.sleep(_POLL_EVERY)
                 except Exception:
                     logger.exception("SSE poll error")
+                    connection.close()
                     yield ": ping\n\n"
                     time.sleep(_POLL_EVERY)
         finally:
@@ -244,6 +241,7 @@ def sse(request: HttpRequest):
                 MCPBridgeMessage.objects.filter(session_id=key).delete()
             except Exception:
                 pass
+            connection.close()
             logger.info("SSE session closed key=%s...", key[:12])
 
     response = StreamingHttpResponse(

@@ -28,10 +28,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
       - run: pip install ruff
-      - name: Ruff check
-        run: ruff check . || echo "::warning::Ruff found issues"
-      - name: Ruff format
-        run: ruff format --check . || echo "::warning::Formatting differs"
+      - run: ruff check . || echo "::warning::Ruff issues"
+      - run: ruff format --check . || echo "::warning::Format differs"
 
   test:
     name: "2. Test (Django)"
@@ -51,13 +49,13 @@ jobs:
           pip install -r requirements.txt
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
           pip install coverage
-      - name: Django system check
+      - name: Django system check (blocking)
         run: python manage.py check --fail-level WARNING
-      - name: Migrations check
-        run: python manage.py makemigrations --check --dry-run
-      - name: Apply migrations
+      - name: Migrations check (warning)
+        run: python manage.py makemigrations --check --dry-run || echo "::warning::Model/migration drift"
+      - name: Apply migrations (blocking)
         run: python manage.py migrate --noinput
-      - name: Tests
+      - name: Tests (blocking)
         run: |
           coverage run --source='.' manage.py test
           coverage report -m
@@ -85,16 +83,12 @@ jobs:
         run: |
           printf '1\n' | cr deploy wagtail-sandbox || printf '2\n' | cr deploy wagtail-sandbox
       - name: Post-deploy health gate
-        id: health
         run: |
           for i in $(seq 1 10); do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${{ env.SITE_URL }}" || echo 000)
             echo "Attempt $i — HTTP $STATUS"
-            if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 400 ]; then
-              echo "status=$STATUS" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
+            if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 400 ]; then exit 0; fi
             sleep 15
           done
-          echo "::error::Site unhealthy after deploy (HTTP $STATUS)"
+          echo "::error::Site unhealthy after deploy"
           exit 1

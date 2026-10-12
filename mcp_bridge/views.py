@@ -1,10 +1,9 @@
 """
 MCP SSE bridge for Grok (URL-only connector).
 
-- Signed session IDs (any worker validates)
-- Message queue in DB
-- _call_mcp invokes wagtail-mcp view in-process (RequestFactory)
-  — never HTTP-loopback to the same Gunicorn (that deadlocks when SSE holds a worker)
+_call_mcp uses RequestFactory + resolve (no self-HTTP deadlock).
+Accept: application/json so wagtail-mcp returns a finite body, not an
+open event-stream that never ends when consumed in-process.
 """
 from __future__ import annotations
 
@@ -31,6 +30,7 @@ _SALT = "mcp-bridge-sse-v2"
 _SESSION_MAX_AGE = 120
 _MAX_SSE_SECONDS = 90
 _POLL_EVERY = 1.0
+_MAX_BODY_BYTES = 512_000
 
 
 def _token() -> str:
@@ -66,7 +66,6 @@ def _msg_key(session_id: str) -> str:
 
 
 def _consume_response(response) -> tuple[int, str, str]:
-    """Read status, body text, content-type from Django response (incl. streaming)."""
     status = getattr(response, "status_code", 200)
     ct = ""
     if hasattr(response, "headers"):
@@ -75,13 +74,41 @@ def _consume_response(response) -> tuple[int, str, str]:
         ct = response.get("Content-Type", "") or ""
 
     if hasattr(response, "streaming_content"):
-        chunks = []
-        for chunk in response.streaming_content:
-            if isinstance(chunk, bytes):
-                chunks.append(chunk.decode("utf-8", errors="replace"))
-            else:
-                chunks.append(str(chunk))
-        raw = "".join(chunks)
+        parts = []
+        total = 0
+        try:
+            for chunk in response.streaming_content:
+                if isinstance(chunk, bytes):
+                    piece = chunk.decode("utf-8", errors="replace")
+                else:
+                    piece = str(chunk)
+                parts.append(piece)
+                total += len(piece)
+                # Stop early once we have a complete JSON object or SSE data line
+                joined = "".join(parts)
+                if total >= _MAX_BODY_BYTES:
+                    break
+                if "text/event-stream" in (ct or "").lower():
+                    if "\ndata:" in joined or joined.startswith("data:"):
+                        # got at least one event; enough for single RPC reply
+                        if joined.count("\n\n") >= 1 or joined.count("\r\n\r\n") >= 1:
+                            break
+                else:
+                    s = joined.strip()
+                    if s.startswith("{") and s.endswith("}"):
+                        try:
+                            json.loads(s)
+                            break
+                        except json.JSONDecodeError:
+                            pass
+        finally:
+            closer = getattr(response, "close", None)
+            if callable(closer):
+                try:
+                    closer()
+                except Exception:
+                    pass
+        raw = "".join(parts)
     else:
         content = getattr(response, "content", b"") or b""
         if isinstance(content, bytes):
@@ -105,13 +132,6 @@ def _parse_mcp_body(raw: str, content_type: str) -> str:
 
 
 def _call_mcp(body: dict) -> str:
-    """
-    Call wagtail-mcp in the same process via RequestFactory + URL resolve.
-
-    Avoids:
-      - Django Test Client (heavy, can nest badly under gthread)
-      - HTTP to public URL / 127.0.0.1 (deadlocks when SSE holds the only free worker)
-    """
     token = _token()
     if not token:
         return json.dumps(
@@ -127,16 +147,17 @@ def _call_mcp(body: dict) -> str:
 
     try:
         factory = RequestFactory()
+        # Prefer finite JSON body — avoid open-ended streamable responses
         request = factory.post(
             "/mcp/",
             data=json.dumps(body),
             content_type="application/json",
             HTTP_AUTHORIZATION=f"Bearer {token}",
-            HTTP_ACCEPT="application/json, text/event-stream",
+            HTTP_ACCEPT="application/json",
         )
         match = resolve("/mcp/")
-        response = match.func(request, *match.args, **match.kwargs)
-        # Class-based views return callable
+        view = match.func
+        response = view(request, *match.args, **match.kwargs)
         if not hasattr(response, "status_code") and callable(response):
             response = response(request)
         status, raw, ct = _consume_response(response)
@@ -164,7 +185,12 @@ def _call_mcp(body: dict) -> str:
         )
 
     result = _parse_mcp_body(raw, ct)
-    logger.info("MCP OK method=%s status=%s bytes=%s", body.get("method", "?"), status, len(result))
+    logger.info(
+        "MCP OK method=%s status=%s bytes=%s",
+        body.get("method", "?"),
+        status,
+        len(result),
+    )
     return result
 
 
@@ -263,7 +289,7 @@ def health(request: HttpRequest):
         {
             "status": "ok",
             "token_configured": bool(_token()),
-            "call_mode": "request_factory",
+            "call_mode": "request_factory_json",
             "sse_max_seconds": _MAX_SSE_SECONDS,
             "session_auth": "signed",
             "message_store": "database",

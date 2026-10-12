@@ -7,8 +7,6 @@ from .base import *  # noqa: F403
 
 import os
 
-# -- Recommended CodeRed Cloud settings ---------------------------------------
-
 DEBUG = False
 
 ALLOWED_HOSTS = [os.environ["VIRTUAL_HOST"]]
@@ -19,30 +17,23 @@ CSRF_TRUSTED_ORIGINS = [
     f"https://{os.environ['VIRTUAL_HOST']}",
 ]
 
-# Wagtail admin / API absolute URLs
 WAGTAILADMIN_BASE_URL = f"https://{os.environ['VIRTUAL_HOST']}"
 WAGTAILAPI_BASE_URL = f"https://{os.environ['VIRTUAL_HOST']}"
 
-# Expose host for MCP bridge defaults
 VIRTUAL_HOST = os.environ["VIRTUAL_HOST"]
 
-# MCP bridge: token from CodeRed env; public URL defaults to this site
+# MCP: token from CodeRed env. Bridge calls /mcp/ in-process (RequestFactory).
+# Do NOT set MCP_TARGET_URL to the public site URL — that deadlocks under SSE.
 MCP_TOKEN = os.environ.get("MCP_TOKEN", "")
 MCP_PUBLIC_URL = os.environ.get(
     "MCP_PUBLIC_URL",
     f"https://{os.environ['VIRTUAL_HOST']}",
 )
-MCP_TARGET_URL = os.environ.get(
-    "MCP_TARGET_URL",
-    f"https://{os.environ['VIRTUAL_HOST']}/mcp/",
-)
+# Leave empty unless you run a separate MCP process; bridge uses RequestFactory.
+MCP_TARGET_URL = os.environ.get("MCP_TARGET_URL", "")
 
-# Built-in email sending service provided by CodeRed Cloud.
 EMAIL_BACKEND = "cr_sendmail.backends.SendmailBackend"
 
-# Database: CodeRed provides MySQL or PostgreSQL via the same DB_* env vars.
-# Default is MySQL (matches CodeRed demo). If your site uses PostgreSQL,
-# set DB_ENGINE=django.db.backends.postgresql in CodeRed dashboard env vars.
 _db_engine = os.environ.get("DB_ENGINE", "django.db.backends.mysql")
 
 if _db_engine.endswith("postgresql") or _db_engine.endswith("postgresql_psycopg2"):
@@ -60,7 +51,6 @@ if _db_engine.endswith("postgresql") or _db_engine.endswith("postgresql_psycopg2
         }
     }
 else:
-    # MySQL (default)
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.mysql",
@@ -75,7 +65,6 @@ else:
         }
     }
 
-# Logging to CodeRed /log (visible via SFTP). Fall back to console if path missing.
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

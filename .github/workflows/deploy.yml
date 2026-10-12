@@ -1,7 +1,8 @@
 # =============================================================================
-#  Deploy to CodeRed Cloud - Full CI/CD Pipeline
-#  - push / PR: فقط Lint + Test
-#  - دیپلوی فقط با تایید دستی (Actions → Run workflow)
+#  Deploy to CodeRed Cloud - Hardened CI/CD
+#  - push / PR: Lint + Test (blocking)
+#  - Deploy فقط با workflow_dispatch روی main
+#  - بعد از Deploy: Health Gate (اگر سایت 5xx بماند، job fail می‌شود)
 # =============================================================================
 
 name: Deploy to CodeRed Cloud
@@ -21,6 +22,7 @@ concurrency:
 
 env:
   PYTHON_VERSION: "3.12"
+  SITE_URL: "https://wagtail-sandbox.codered.cloud/"
 
 jobs:
   lint:
@@ -39,15 +41,11 @@ jobs:
       - name: Install Ruff
         run: pip install ruff
 
-      - name: Run Ruff linter
-        run: |
-          echo "==> Ruff check"
-          ruff check . || echo "::warning::Ruff found lint issues (non-blocking)"
+      - name: Run Ruff linter (blocking)
+        run: ruff check .
 
-      - name: Run Ruff formatter check
-        run: |
-          echo "==> Ruff format check"
-          ruff format --check . || echo "::warning::Formatting differs (non-blocking)"
+      - name: Run Ruff formatter check (blocking)
+        run: ruff format --check .
 
   test:
     name: "2. Test (Django)"
@@ -71,28 +69,24 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
-          if [ -f requirements-dev.txt ]; then
-            pip install -r requirements-dev.txt
-          fi
+          pip install -r requirements.txt
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
           pip install coverage
 
-      - name: Django system check
+      - name: Django system check (blocking)
         run: python manage.py check --fail-level WARNING
-        continue-on-error: true
 
-      - name: Run migrations check
+      - name: Migrations check — no model/migration drift (blocking)
         run: python manage.py makemigrations --check --dry-run
-        continue-on-error: true
 
-      - name: Run tests with coverage
+      - name: Apply migrations on test DB (blocking)
+        run: python manage.py migrate --noinput
+
+      - name: Run tests (blocking)
         run: |
           coverage run --source='.' manage.py test
           coverage report -m
           coverage xml
-        continue-on-error: true
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -106,7 +100,6 @@ jobs:
     name: "3. Deploy to CodeRed Cloud"
     runs-on: ubuntu-latest
     needs: [lint, test]
-    # فقط وقتی خودت از تب Actions روی Run workflow بزنی
     if: |
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main'
@@ -120,7 +113,7 @@ jobs:
       - name: Verify secret is set
         run: |
           if [ -z "${{ secrets.cr_token }}" ]; then
-            echo "::error::Secret 'cr_token' is not set in repository settings."
+            echo "::error::Secret 'cr_token' is not set."
             exit 1
           fi
           echo "✅ Secret 'cr_token' is available."
@@ -144,13 +137,48 @@ jobs:
           echo "==> Commit: ${{ github.sha }}"
           printf '1\n' | cr deploy wagtail-sandbox || printf '2\n' | cr deploy wagtail-sandbox
 
+      - name: Post-deploy health gate
+        id: health
+        run: |
+          URL="${{ env.SITE_URL }}"
+          MAX_ATTEMPTS=10
+          SLEEP_SECONDS=15
+          STATUS="000"
+
+          echo "==> Waiting for site to become healthy after deploy..."
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$URL" || echo "000")
+            echo "Attempt $i/$MAX_ATTEMPTS — HTTP $STATUS"
+
+            if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 400 ]; then
+              echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+              echo "✅ Site is healthy (HTTP $STATUS)"
+              exit 0
+            fi
+
+            if [ "$i" -lt "$MAX_ATTEMPTS" ]; then
+              echo "Not ready yet. Waiting ${SLEEP_SECONDS}s..."
+              sleep "$SLEEP_SECONDS"
+            fi
+          done
+
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          echo "::error::Site still unhealthy after deploy (HTTP $STATUS). Consider Rollback."
+          exit 1
+
       - name: Deployment summary
         if: success()
         run: |
           echo "## ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| Site | https://wagtail-sandbox.codered.cloud/ |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Health | HTTP ${{ steps.health.outputs.status }} |" >> $GITHUB_STEP_SUMMARY
 
       - name: Failure summary
         if: failure()
         run: |
-          echo "## ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          echo "## ❌ Deployment or Health Gate Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "If the site is down, run **Rollback Deployment** workflow with a previous good SHA." >> $GITHUB_STEP_SUMMARY

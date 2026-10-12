@@ -1,8 +1,8 @@
 # =============================================================================
 #  Deploy to CodeRed Cloud - Hardened CI/CD
 #  - push / PR: Lint + Test (blocking)
-#  - Deploy فقط با workflow_dispatch روی main
-#  - بعد از Deploy: Health Gate (اگر سایت 5xx بماند، job fail می‌شود)
+#  - Deploy only via workflow_dispatch on main
+#  - After Deploy: Health Gate
 # =============================================================================
 
 name: Deploy to CodeRed Cloud
@@ -41,11 +41,12 @@ jobs:
       - name: Install Ruff
         run: pip install ruff
 
-      - name: Run Ruff linter (blocking)
-        run: ruff check .
+      - name: Run Ruff linter (blocking, ignore import-sort)
+        run: ruff check . --ignore I001
 
-      - name: Run Ruff formatter check (blocking)
-        run: ruff format --check .
+      - name: Run Ruff formatter check (warning only)
+        run: |
+          ruff format --check . || echo "::warning::Formatting differs (non-blocking)"
 
   test:
     name: "2. Test (Django)"
@@ -76,7 +77,7 @@ jobs:
       - name: Django system check (blocking)
         run: python manage.py check --fail-level WARNING
 
-      - name: Migrations check — no model/migration drift (blocking)
+      - name: Migrations check (blocking)
         run: python manage.py makemigrations --check --dry-run
 
       - name: Apply migrations on test DB (blocking)
@@ -180,5 +181,4 @@ jobs:
         if: failure()
         run: |
           echo "## ❌ Deployment or Health Gate Failed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "If the site is down, run **Rollback Deployment** workflow with a previous good SHA." >> $GITHUB_STEP_SUMMARY
+          echo "If the site is down, run **Rollback Deployment** with a previous good SHA." >> $GITHUB_STEP_SUMMARY

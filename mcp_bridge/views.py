@@ -3,12 +3,8 @@ In-process MCP bridge for Grok (URL-only connector).
 
 Grok ──GET /sse──▶ bridge ──(+ MCP_TOKEN)──▶ /mcp/  (same Django app)
 
-Design goals (CodeRed / few workers):
-  - Session + message queue in the DATABASE so any Gunicorn worker can
-    serve /sse and /messages (no sticky in-memory state).
-  - Only one concurrent SSE session (one Grok is enough).
-  - Hard time-cap on SSE so a stuck client cannot hold a worker forever.
-  - Site stays responsive via gthread workers (see Dockerfile).
+Critical: session rows are committed BEFORE the SSE stream starts so
+other Gunicorn workers can resolve POST /messages/?session_id=...
 """
 from __future__ import annotations
 
@@ -19,6 +15,7 @@ import uuid
 from datetime import timedelta
 
 from django.conf import settings
+from django.db import connection, transaction
 from django.http import HttpRequest, JsonResponse, StreamingHttpResponse
 from django.test import Client
 from django.utils import timezone
@@ -29,11 +26,10 @@ from mcp_bridge.models import MCPBridgeMessage, MCPBridgeSession
 
 logger = logging.getLogger(__name__)
 
-# Tuned for: 1 Grok user, site must not go down
 _SESSION_TTL_SECONDS = 120
-_MAX_SSE_SECONDS = 60
+_MAX_SSE_SECONDS = 90
 _MAX_CONCURRENT_SSE = 1
-_POLL_EVERY = 1.5
+_POLL_EVERY = 1.0
 
 
 def _token() -> str:
@@ -70,7 +66,6 @@ def _active_session_count() -> int:
 
 
 def _call_mcp(body: dict) -> str:
-    """POST JSON-RPC to wagtail-mcp in-process (injects MCP_TOKEN)."""
     token = _token()
     if not token:
         return json.dumps(
@@ -124,7 +119,7 @@ def _call_mcp(body: dict) -> str:
 @csrf_exempt
 @require_GET
 def sse(request: HttpRequest):
-    """Legacy MCP SSE — DB-backed, time-capped, single concurrent session."""
+    """SSE transport — commit session row before streaming begins."""
     _cleanup_stale()
     token = _token()
     if not token:
@@ -143,7 +138,12 @@ def sse(request: HttpRequest):
         )
 
     session_id = str(uuid.uuid4())
-    MCPBridgeSession.objects.create(session_id=session_id)
+
+    # Commit in its own atomic block, then close the DB connection so the
+    # row is visible to other workers before we start the long SSE stream.
+    with transaction.atomic():
+        MCPBridgeSession.objects.create(session_id=session_id)
+    connection.close()
 
     base = _public_base(request)
     endpoint_url = f"{base}/messages/?session_id={session_id}"
@@ -154,24 +154,31 @@ def sse(request: HttpRequest):
         deadline = time.time() + _MAX_SSE_SECONDS
         try:
             while time.time() < deadline:
-                # Touch session so TTL does not expire mid-stream
-                MCPBridgeSession.objects.filter(session_id=session_id).update(
-                    last_seen=timezone.now()
-                )
-                rows = list(
-                    MCPBridgeMessage.objects.filter(session_id=session_id).order_by("id")[:20]
-                )
-                if rows:
-                    ids = [r.id for r in rows]
-                    for row in rows:
-                        yield f"event: message\ndata: {row.payload}\n\n"
-                    MCPBridgeMessage.objects.filter(id__in=ids).delete()
-                else:
+                try:
+                    MCPBridgeSession.objects.filter(session_id=session_id).update(
+                        last_seen=timezone.now()
+                    )
+                    rows = list(
+                        MCPBridgeMessage.objects.filter(session_id=session_id).order_by("id")[:20]
+                    )
+                    if rows:
+                        ids = [r.id for r in rows]
+                        for row in rows:
+                            yield f"event: message\ndata: {row.payload}\n\n"
+                        MCPBridgeMessage.objects.filter(id__in=ids).delete()
+                    else:
+                        yield ": ping\n\n"
+                        time.sleep(_POLL_EVERY)
+                except Exception:
+                    logger.exception("SSE poll error session=%s", session_id[:8])
                     yield ": ping\n\n"
                     time.sleep(_POLL_EVERY)
         finally:
-            MCPBridgeMessage.objects.filter(session_id=session_id).delete()
-            MCPBridgeSession.objects.filter(session_id=session_id).delete()
+            try:
+                MCPBridgeMessage.objects.filter(session_id=session_id).delete()
+                MCPBridgeSession.objects.filter(session_id=session_id).delete()
+            except Exception:
+                logger.exception("SSE cleanup failed session=%s", session_id[:8])
             logger.info("SSE session closed %s", session_id[:8])
 
     response = StreamingHttpResponse(
@@ -186,7 +193,6 @@ def sse(request: HttpRequest):
 @csrf_exempt
 @require_POST
 def messages(request: HttpRequest):
-    """SSE message intake — any worker can handle (DB session lookup)."""
     session_id = request.GET.get("session_id")
     if not session_id:
         return JsonResponse({"error": "missing session_id"}, status=400)

@@ -2,17 +2,15 @@
 In-process MCP bridge for Grok (URL-only connector).
 
 Session IDs are cryptographically signed so ANY worker can validate
-POST /messages without relying on a row written by the SSE worker
-(which may not be visible mid-stream under some DB/pool setups).
-
-Response payloads still go through the DB message table so the SSE
-worker can poll and push them to the client.
+POST /messages without relying on a row written by the SSE worker.
+Response payloads go through the DB message table for SSE delivery.
 """
 from __future__ import annotations
 
 import json
 import logging
 import time
+from datetime import timedelta
 
 from django.conf import settings
 from django.core import signing
@@ -30,10 +28,6 @@ _SALT = "mcp-bridge-sse-v2"
 _SESSION_MAX_AGE = 120
 _MAX_SSE_SECONDS = 90
 _POLL_EVERY = 1.0
-
-# Soft capacity: count distinct session_ids with recent messages / active streams
-# is approximate; primary goal is site stability not multi-tenant fairness.
-_MAX_CONCURRENT_SSE = 2
 
 
 def _token() -> str:
@@ -116,8 +110,7 @@ def _call_mcp(body: dict) -> str:
 
 
 def _purge_old_messages() -> None:
-    """Drop messages older than session max age to keep table small."""
-    cutoff = timezone.now() - timezone.timedelta(seconds=_SESSION_MAX_AGE + 30)
+    cutoff = timezone.now() - timedelta(seconds=_SESSION_MAX_AGE + 30)
     deleted, _ = MCPBridgeMessage.objects.filter(created_at__lt=cutoff).delete()
     if deleted:
         logger.info("Purged %s old MCP bridge messages", deleted)
@@ -142,7 +135,6 @@ def sse(request: HttpRequest):
     def event_stream():
         yield f"event: endpoint\ndata: {endpoint_url}\n\n"
         deadline = time.time() + _MAX_SSE_SECONDS
-        # Use a short stable key for DB lookup (full signed token can be long)
         key = session_id
         try:
             while time.time() < deadline:
@@ -197,8 +189,6 @@ def messages(request: HttpRequest):
 
     result_text = _call_mcp(body)
     if result_text:
-        # Truncate session_id for DB if needed — MySQL index-friendly length
-        # Full signed token fits in 255 easily for our payload size.
         MCPBridgeMessage.objects.create(
             session_id=session_id[:255],
             payload=result_text,

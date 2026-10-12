@@ -43,7 +43,19 @@ COPY --chown=wagtail:wagtail . .
 USER wagtail
 
 RUN python manage.py collectstatic --noinput --clear
-# Compile translation messages (fa)
 RUN python manage.py compilemessages || true
 
-CMD set -xe; python manage.py migrate --noinput; gunicorn wagtail_sandbox.wsgi:application
+# gthread: one thread can hold MCP SSE while others serve the public site + /messages
+# workers=2, threads=4 → site stays up when one Grok SSE session is open
+CMD set -xe; \
+    python manage.py migrate --noinput; \
+    gunicorn wagtail_sandbox.wsgi:application \
+      --bind 0.0.0.0:${PORT:-8000} \
+      --workers 2 \
+      --threads 4 \
+      --worker-class gthread \
+      --timeout 90 \
+      --graceful-timeout 30 \
+      --keep-alive 5 \
+      --max-requests 500 \
+      --max-requests-jitter 50

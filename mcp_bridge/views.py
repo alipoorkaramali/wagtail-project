@@ -1,12 +1,14 @@
 """
-In-process MCP bridge for Grok (URL-only connector, no Bearer in UI).
+In-process MCP bridge for Grok (URL-only connector).
 
-Grok ──GET /sse──▶ bridge ──(+ MCP_TOKEN)──▶ /mcp/  (same Django process)
+Grok ──GET /sse──▶ bridge ──(+ MCP_TOKEN)──▶ /mcp/  (same Django app)
 
-IMPORTANT on CodeRed (few WSGI workers):
-  A long-lived SSE stream holds one worker for the whole connection.
-  We hard-cap session length and concurrent streams so the site
-  cannot stay offline (CR504) when Grok or bots open /sse.
+Design goals (CodeRed / few workers):
+  - Session + message queue in the DATABASE so any Gunicorn worker can
+    serve /sse and /messages (no sticky in-memory state).
+  - Only one concurrent SSE session (one Grok is enough).
+  - Hard time-cap on SSE so a stuck client cannot hold a worker forever.
+  - Site stays responsive via gthread workers (see Dockerfile).
 """
 from __future__ import annotations
 
@@ -14,24 +16,24 @@ import json
 import logging
 import time
 import uuid
-from queue import Empty, Queue
+from datetime import timedelta
 
 from django.conf import settings
 from django.http import HttpRequest, JsonResponse, StreamingHttpResponse
 from django.test import Client
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
+from mcp_bridge.models import MCPBridgeMessage, MCPBridgeSession
+
 logger = logging.getLogger(__name__)
 
-_sessions: dict[str, Queue] = {}
-_session_touch: dict[str, float] = {}
-
-# Keep CodeRed responsive: short streams, few concurrent sessions.
-_SESSION_TTL = 90
-_MAX_SSE_SECONDS = 45
+# Tuned for: 1 Grok user, site must not go down
+_SESSION_TTL_SECONDS = 120
+_MAX_SSE_SECONDS = 60
 _MAX_CONCURRENT_SSE = 1
-_PING_EVERY = 5
+_POLL_EVERY = 1.5
 
 
 def _token() -> str:
@@ -51,20 +53,24 @@ def _public_base(request: HttpRequest) -> str:
 
 
 def _cleanup_stale() -> None:
-    now = time.time()
-    stale = [sid for sid, ts in _session_touch.items() if now - ts > _SESSION_TTL]
-    for sid in stale:
-        q = _sessions.pop(sid, None)
-        _session_touch.pop(sid, None)
-        if q is not None:
-            try:
-                q.put_nowait(None)
-            except Exception:
-                pass
+    cutoff = timezone.now() - timedelta(seconds=_SESSION_TTL_SECONDS)
+    stale_ids = list(
+        MCPBridgeSession.objects.filter(last_seen__lt=cutoff).values_list("session_id", flat=True)
+    )
+    if not stale_ids:
+        return
+    MCPBridgeMessage.objects.filter(session_id__in=stale_ids).delete()
+    MCPBridgeSession.objects.filter(session_id__in=stale_ids).delete()
+    logger.info("MCP bridge cleaned %s stale sessions", len(stale_ids))
+
+
+def _active_session_count() -> int:
+    cutoff = timezone.now() - timedelta(seconds=_SESSION_TTL_SECONDS)
+    return MCPBridgeSession.objects.filter(last_seen__gte=cutoff).count()
 
 
 def _call_mcp(body: dict) -> str:
-    """POST JSON-RPC to wagtail-mcp in-process (no outbound HTTP)."""
+    """POST JSON-RPC to wagtail-mcp in-process (injects MCP_TOKEN)."""
     token = _token()
     if not token:
         return json.dumps(
@@ -101,11 +107,7 @@ def _call_mcp(body: dict) -> str:
     content_type = response.get("Content-Type", "") or ""
 
     if response.status_code >= 400:
-        logger.warning(
-            "MCP in-process HTTP %s: %s",
-            response.status_code,
-            raw[:300],
-        )
+        logger.warning("MCP in-process HTTP %s: %s", response.status_code, raw[:300])
 
     if content_type.startswith("text/event-stream"):
         chunks = []
@@ -122,7 +124,7 @@ def _call_mcp(body: dict) -> str:
 @csrf_exempt
 @require_GET
 def sse(request: HttpRequest):
-    """Legacy MCP SSE — capped so it cannot monopolize CodeRed workers."""
+    """Legacy MCP SSE — DB-backed, time-capped, single concurrent session."""
     _cleanup_stale()
     token = _token()
     if not token:
@@ -131,19 +133,17 @@ def sse(request: HttpRequest):
             status=503,
         )
 
-    if len(_sessions) >= _MAX_CONCURRENT_SSE:
+    if _active_session_count() >= _MAX_CONCURRENT_SSE:
         return JsonResponse(
             {
                 "error": "SSE capacity full",
-                "detail": "Another MCP session is active. Retry in under a minute.",
+                "detail": "One MCP session is already active. Retry in under a minute.",
             },
             status=503,
         )
 
     session_id = str(uuid.uuid4())
-    msg_queue: Queue = Queue()
-    _sessions[session_id] = msg_queue
-    _session_touch[session_id] = time.time()
+    MCPBridgeSession.objects.create(session_id=session_id)
 
     base = _public_base(request)
     endpoint_url = f"{base}/messages/?session_id={session_id}"
@@ -154,18 +154,24 @@ def sse(request: HttpRequest):
         deadline = time.time() + _MAX_SSE_SECONDS
         try:
             while time.time() < deadline:
-                try:
-                    msg = msg_queue.get(timeout=_PING_EVERY)
-                except Empty:
+                # Touch session so TTL does not expire mid-stream
+                MCPBridgeSession.objects.filter(session_id=session_id).update(
+                    last_seen=timezone.now()
+                )
+                rows = list(
+                    MCPBridgeMessage.objects.filter(session_id=session_id).order_by("id")[:20]
+                )
+                if rows:
+                    ids = [r.id for r in rows]
+                    for row in rows:
+                        yield f"event: message\ndata: {row.payload}\n\n"
+                    MCPBridgeMessage.objects.filter(id__in=ids).delete()
+                else:
                     yield ": ping\n\n"
-                    continue
-                if msg is None:
-                    break
-                _session_touch[session_id] = time.time()
-                yield f"event: message\ndata: {msg}\n\n"
+                    time.sleep(_POLL_EVERY)
         finally:
-            _sessions.pop(session_id, None)
-            _session_touch.pop(session_id, None)
+            MCPBridgeMessage.objects.filter(session_id=session_id).delete()
+            MCPBridgeSession.objects.filter(session_id=session_id).delete()
             logger.info("SSE session closed %s", session_id[:8])
 
     response = StreamingHttpResponse(
@@ -180,16 +186,17 @@ def sse(request: HttpRequest):
 @csrf_exempt
 @require_POST
 def messages(request: HttpRequest):
-    """SSE message intake — JSON-RPC → /mcp/ in-process."""
+    """SSE message intake — any worker can handle (DB session lookup)."""
     session_id = request.GET.get("session_id")
     if not session_id:
         return JsonResponse({"error": "missing session_id"}, status=400)
 
-    msg_queue = _sessions.get(session_id)
-    if msg_queue is None:
+    _cleanup_stale()
+    session = MCPBridgeSession.objects.filter(session_id=session_id).first()
+    if session is None:
         return JsonResponse({"error": "invalid or expired session"}, status=404)
 
-    _session_touch[session_id] = time.time()
+    MCPBridgeSession.objects.filter(pk=session.pk).update(last_seen=timezone.now())
 
     try:
         body = json.loads(request.body.decode("utf-8"))
@@ -204,21 +211,23 @@ def messages(request: HttpRequest):
 
     result_text = _call_mcp(body)
     if result_text:
-        msg_queue.put(result_text)
+        MCPBridgeMessage.objects.create(session_id=session_id, payload=result_text)
 
     return JsonResponse({"status": "queued"}, status=202)
 
 
 @csrf_exempt
 def health(request: HttpRequest):
+    _cleanup_stale()
     return JsonResponse(
         {
             "status": "ok",
-            "sessions": len(_sessions),
+            "sessions": _active_session_count(),
             "token_configured": bool(_token()),
             "target": "in-process:/mcp/",
             "sse_max_seconds": _MAX_SSE_SECONDS,
             "sse_max_concurrent": _MAX_CONCURRENT_SSE,
+            "session_store": "database",
             "public_url": getattr(settings, "MCP_PUBLIC_URL", None) or None,
         }
     )

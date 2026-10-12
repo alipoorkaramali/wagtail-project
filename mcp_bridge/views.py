@@ -1,12 +1,12 @@
 """
 In-process MCP bridge for Grok (URL-only connector).
 
-Session IDs are cryptographically signed so ANY worker can validate
-POST /messages without relying on a row written by the SSE worker.
-Response payloads go through the DB message table for SSE delivery.
+- Session IDs are signed tokens (any worker can validate).
+- Message queue keys are sha256(session_id) to fit DB varchar(64).
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import time
@@ -56,6 +56,10 @@ def _valid_session_id(session_id: str) -> bool:
         return True
     except signing.BadSignature:
         return False
+
+
+def _msg_key(session_id: str) -> str:
+    return hashlib.sha256(session_id.encode("utf-8")).hexdigest()
 
 
 def _call_mcp(body: dict) -> str:
@@ -128,14 +132,14 @@ def sse(request: HttpRequest):
         )
 
     session_id = _make_session_id()
+    key = _msg_key(session_id)
     base = _public_base(request)
     endpoint_url = f"{base}/messages/?session_id={session_id}"
-    logger.info("SSE session start %s...", session_id[:16])
+    logger.info("SSE session start key=%s...", key[:12])
 
     def event_stream():
         yield f"event: endpoint\ndata: {endpoint_url}\n\n"
         deadline = time.time() + _MAX_SSE_SECONDS
-        key = session_id
         try:
             while time.time() < deadline:
                 try:
@@ -159,7 +163,7 @@ def sse(request: HttpRequest):
                 MCPBridgeMessage.objects.filter(session_id=key).delete()
             except Exception:
                 pass
-            logger.info("SSE session closed %s...", session_id[:16])
+            logger.info("SSE session closed key=%s...", key[:12])
 
     response = StreamingHttpResponse(
         event_stream(),
@@ -190,7 +194,7 @@ def messages(request: HttpRequest):
     result_text = _call_mcp(body)
     if result_text:
         MCPBridgeMessage.objects.create(
-            session_id=session_id[:255],
+            session_id=_msg_key(session_id),
             payload=result_text,
         )
 

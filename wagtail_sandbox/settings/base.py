@@ -88,8 +88,9 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
+# پنل ادمین و محتوای سایت فارسی
+LANGUAGE_CODE = "fa"
+TIME_ZONE = "Asia/Tehran"
 USE_I18N = True
 USE_TZ = True
 
@@ -102,7 +103,6 @@ STATICFILES_DIRS = [
     PROJECT_DIR / "static",
 ]
 
-# CodeRed docs recommend STATIC_ROOT under BASE_DIR/static
 STATIC_ROOT = BASE_DIR / "static"
 STATIC_URL = "/static/"
 
@@ -136,7 +136,6 @@ WAGTAILDOCS_EXTENSIONS = [
 ]
 WAGTAILDOCS_MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 
-# --- MCP bridge (Grok connector: URL only, token injected server-side) ---
 MCP_TOKEN = os.environ.get("MCP_TOKEN", "")
 MCP_TARGET_URL = os.environ.get("MCP_TARGET_URL", "")
 MCP_PUBLIC_URL = os.environ.get("MCP_PUBLIC_URL", "")

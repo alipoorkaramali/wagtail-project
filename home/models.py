@@ -714,14 +714,14 @@ class Accordion(ClusterableModel):
         FieldPanel("title"),
         FieldPanel("heading"),
         FieldPanel("is_active"),
-        InlinePanel("panels", label="پنل آکاردئون", min_num=1),
+        InlinePanel("accordion_panels", label="پنل آکاردئون", min_num=1),
     ]
 
     api_fields = [
         APIField("title", writable=True),
         APIField("heading", writable=True),
         APIField("is_active", writable=True),
-        APIField("panels", writable=True),
+        APIField("accordion_panels", writable=True),
     ]
 
     def __str__(self):
@@ -736,7 +736,7 @@ class AccordionPanel(Orderable):
     accordion = ParentalKey(
         "home.Accordion",
         on_delete=models.CASCADE,
-        related_name="panels",
+        related_name="accordion_panels",
     )
     title = models.CharField(max_length=200, verbose_name="عنوان پنل")
     content = RichTextField(verbose_name="محتوا")

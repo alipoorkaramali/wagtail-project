@@ -1,4 +1,5 @@
 # Generated migration for content snippets (priorities 5–10)
+# Fixed: related_name accordion_panels (avoid conflict with Wagtail .panels)
 
 import django.db.models.deletion
 import modelcluster.fields
@@ -122,7 +123,14 @@ class Migration(migrations.Migration):
                 ("title", models.CharField(max_length=200, verbose_name="عنوان پنل")),
                 ("content", wagtail.fields.RichTextField(verbose_name="محتوا")),
                 ("is_open_by_default", models.BooleanField(default=False, verbose_name="باز به‌صورت پیش‌فرض")),
-                ("accordion", modelcluster.fields.ParentalKey(on_delete=django.db.models.deletion.CASCADE, related_name="panels", to="home.accordion")),
+                (
+                    "accordion",
+                    modelcluster.fields.ParentalKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="accordion_panels",
+                        to="home.accordion",
+                    ),
+                ),
             ],
             options={
                 "ordering": ["sort_order"],

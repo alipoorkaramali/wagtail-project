@@ -456,6 +456,361 @@ class AlertBar(models.Model):
 
 
 # ──────────────────────────────────────────────
+# SNIPPETS — Content (5–10)
+# ──────────────────────────────────────────────
+
+@register_snippet
+class Testimonial(models.Model):
+    """نظر مشتری / Testimonial"""
+
+    name = models.CharField(max_length=100, verbose_name="نام")
+    role = models.CharField(
+        max_length=120,
+        blank=True,
+        verbose_name="سمت / شرکت",
+        help_text="مثلاً مدیرعامل شرکت فلان",
+    )
+    quote = models.TextField(verbose_name="متن نظر")
+    photo = models.ForeignKey(
+        "wagtailimages.Image",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        verbose_name="عکس",
+    )
+    rating = models.PositiveSmallIntegerField(
+        default=5,
+        verbose_name="امتیاز (۱ تا ۵)",
+        help_text="عدد بین ۱ تا ۵",
+    )
+    is_featured = models.BooleanField(
+        default=False,
+        verbose_name="ویژه (نمایش در صفحه اصلی)",
+    )
+
+    panels = [
+        FieldPanel("name"),
+        FieldPanel("role"),
+        FieldPanel("quote"),
+        FieldPanel("photo"),
+        FieldPanel("rating"),
+        FieldPanel("is_featured"),
+    ]
+
+    api_fields = [
+        APIField("name", writable=True),
+        APIField("role", writable=True),
+        APIField("quote", writable=True),
+        APIField("photo", writable=True),
+        APIField("rating", writable=True),
+        APIField("is_featured", writable=True),
+    ]
+
+    def __str__(self):
+        return f"{self.name} — {self.role or 'بدون سمت'}"
+
+    class Meta:
+        verbose_name = "Testimonial / نظر مشتری"
+        verbose_name_plural = "نظرات مشتریان"
+
+
+@register_snippet
+class TeamMember(models.Model):
+    """عضو تیم"""
+
+    name = models.CharField(max_length=100, verbose_name="نام")
+    role = models.CharField(max_length=120, verbose_name="سمت")
+    bio = models.TextField(blank=True, verbose_name="بیو کوتاه")
+    photo = models.ForeignKey(
+        "wagtailimages.Image",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        verbose_name="عکس",
+    )
+    email = models.EmailField(blank=True, verbose_name="ایمیل")
+    linkedin = models.URLField(blank=True, verbose_name="لینکدین")
+    instagram = models.URLField(blank=True, verbose_name="اینستاگرام")
+    website = models.URLField(blank=True, verbose_name="وب‌سایت شخصی")
+    sort_order = models.PositiveIntegerField(
+        default=0,
+        verbose_name="ترتیب نمایش",
+        help_text="عدد کوچک‌تر = بالاتر",
+    )
+
+    panels = [
+        FieldPanel("name"),
+        FieldPanel("role"),
+        FieldPanel("bio"),
+        FieldPanel("photo"),
+        MultiFieldPanel(
+            [
+                FieldPanel("email"),
+                FieldPanel("linkedin"),
+                FieldPanel("instagram"),
+                FieldPanel("website"),
+            ],
+            heading="اطلاعات تماس و شبکه‌های اجتماعی",
+        ),
+        FieldPanel("sort_order"),
+    ]
+
+    api_fields = [
+        APIField("name", writable=True),
+        APIField("role", writable=True),
+        APIField("bio", writable=True),
+        APIField("photo", writable=True),
+        APIField("email", writable=True),
+        APIField("linkedin", writable=True),
+        APIField("instagram", writable=True),
+        APIField("website", writable=True),
+        APIField("sort_order", writable=True),
+    ]
+
+    def __str__(self):
+        return f"{self.name} ({self.role})"
+
+    class Meta:
+        verbose_name = "Team Member / عضو تیم"
+        verbose_name_plural = "اعضای تیم"
+        ordering = ["sort_order", "name"]
+
+
+@register_snippet
+class Service(models.Model):
+    """سرویس قابل استفاده مجدد (مکمل ServiceItem صفحه اصلی)"""
+
+    title = models.CharField(max_length=100, verbose_name="عنوان")
+    short_description = models.TextField(
+        blank=True,
+        verbose_name="توضیح کوتاه",
+    )
+    full_description = RichTextField(
+        blank=True,
+        verbose_name="توضیح کامل",
+    )
+    icon = models.CharField(
+        max_length=50,
+        blank=True,
+        default="✦",
+        verbose_name="آیکون (ایموجی)",
+        help_text="مثلاً 🎨 یا 💻",
+    )
+    image = models.ForeignKey(
+        "wagtailimages.Image",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        verbose_name="تصویر",
+    )
+    link_url = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="لینک (صفحه جزئیات یا خارجی)",
+    )
+    is_featured = models.BooleanField(
+        default=False,
+        verbose_name="ویژه",
+    )
+    sort_order = models.PositiveIntegerField(
+        default=0,
+        verbose_name="ترتیب",
+    )
+
+    panels = [
+        FieldPanel("title"),
+        FieldPanel("icon"),
+        FieldPanel("short_description"),
+        FieldPanel("full_description"),
+        FieldPanel("image"),
+        FieldPanel("link_url"),
+        FieldPanel("is_featured"),
+        FieldPanel("sort_order"),
+    ]
+
+    api_fields = [
+        APIField("title", writable=True),
+        APIField("short_description", writable=True),
+        APIField("full_description", writable=True),
+        APIField("icon", writable=True),
+        APIField("image", writable=True),
+        APIField("link_url", writable=True),
+        APIField("is_featured", writable=True),
+        APIField("sort_order", writable=True),
+    ]
+
+    def __str__(self):
+        return self.title
+
+    class Meta:
+        verbose_name = "Service / سرویس"
+        verbose_name_plural = "سرویس‌ها"
+        ordering = ["sort_order", "title"]
+
+
+@register_snippet
+class FAQItem(models.Model):
+    """سوال متداول (FAQ)"""
+
+    question = models.CharField(max_length=255, verbose_name="سوال")
+    answer = RichTextField(verbose_name="جواب")
+    category = models.CharField(
+        max_length=80,
+        blank=True,
+        verbose_name="دسته‌بندی",
+        help_text="مثلاً عمومی، قیمت، پشتیبانی",
+    )
+    sort_order = models.PositiveIntegerField(
+        default=0,
+        verbose_name="ترتیب",
+    )
+    is_active = models.BooleanField(default=True, verbose_name="فعال")
+
+    panels = [
+        FieldPanel("question"),
+        FieldPanel("answer"),
+        FieldPanel("category"),
+        FieldPanel("sort_order"),
+        FieldPanel("is_active"),
+    ]
+
+    api_fields = [
+        APIField("question", writable=True),
+        APIField("answer", writable=True),
+        APIField("category", writable=True),
+        APIField("sort_order", writable=True),
+        APIField("is_active", writable=True),
+    ]
+
+    def __str__(self):
+        return self.question[:80]
+
+    class Meta:
+        verbose_name = "FAQ Item / سوال متداول"
+        verbose_name_plural = "سوالات متداول"
+        ordering = ["sort_order", "question"]
+
+
+@register_snippet
+class Accordion(ClusterableModel):
+    """آکاردئون — مجموعه پنل‌های تاشو"""
+
+    title = models.CharField(
+        max_length=150,
+        verbose_name="نام داخلی",
+        help_text="فقط برای شناسایی در ادمین",
+    )
+    heading = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name="عنوان نمایشی (اختیاری)",
+    )
+    is_active = models.BooleanField(default=True, verbose_name="فعال")
+
+    panels = [
+        FieldPanel("title"),
+        FieldPanel("heading"),
+        FieldPanel("is_active"),
+        InlinePanel("panels", label="پنل آکاردئون", min_num=1),
+    ]
+
+    api_fields = [
+        APIField("title", writable=True),
+        APIField("heading", writable=True),
+        APIField("is_active", writable=True),
+        APIField("panels", writable=True),
+    ]
+
+    def __str__(self):
+        return self.title
+
+    class Meta:
+        verbose_name = "Accordion / آکاردئون"
+        verbose_name_plural = "آکاردئون‌ها"
+
+
+class AccordionPanel(Orderable):
+    accordion = ParentalKey(
+        "home.Accordion",
+        on_delete=models.CASCADE,
+        related_name="panels",
+    )
+    title = models.CharField(max_length=200, verbose_name="عنوان پنل")
+    content = RichTextField(verbose_name="محتوا")
+    is_open_by_default = models.BooleanField(
+        default=False,
+        verbose_name="باز به‌صورت پیش‌فرض",
+    )
+
+    panels = [
+        FieldPanel("title"),
+        FieldPanel("content"),
+        FieldPanel("is_open_by_default"),
+    ]
+
+    api_fields = [
+        APIField("title", writable=True),
+        APIField("content", writable=True),
+        APIField("is_open_by_default", writable=True),
+    ]
+
+
+@register_snippet
+class PartnerLogo(models.Model):
+    """لوگوی همکار / مشتری"""
+
+    name = models.CharField(
+        max_length=100,
+        verbose_name="نام",
+        help_text="نام شرکت یا برند",
+    )
+    logo = models.ForeignKey(
+        "wagtailimages.Image",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        verbose_name="لوگو",
+    )
+    website = models.URLField(
+        blank=True,
+        verbose_name="لینک وب‌سایت",
+    )
+    sort_order = models.PositiveIntegerField(
+        default=0,
+        verbose_name="ترتیب",
+    )
+    is_active = models.BooleanField(default=True, verbose_name="فعال")
+
+    panels = [
+        FieldPanel("name"),
+        FieldPanel("logo"),
+        FieldPanel("website"),
+        FieldPanel("sort_order"),
+        FieldPanel("is_active"),
+    ]
+
+    api_fields = [
+        APIField("name", writable=True),
+        APIField("logo", writable=True),
+        APIField("website", writable=True),
+        APIField("sort_order", writable=True),
+        APIField("is_active", writable=True),
+    ]
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Partner / Logo"
+        verbose_name_plural = "لوگوهای همکاران"
+        ordering = ["sort_order", "name"]
+
+
+# ──────────────────────────────────────────────
 # HomePage
 # ──────────────────────────────────────────────
 

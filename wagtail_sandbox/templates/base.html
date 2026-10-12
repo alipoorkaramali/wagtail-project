@@ -1,4 +1,4 @@
-{% load static wagtailcore_tags wagtailuserbar %}
+{% load static wagtailcore_tags wagtailuserbar wagtailimages_tags %}
 
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -22,7 +22,7 @@
         <base target="_blank">
         {% endif %}
 
-        <link rel="stylesheet" type="text/css" href="{% static 'css/mysite.css' %}?v=nav3">
+        <link rel="stylesheet" type="text/css" href="{% static 'css/mysite.css' %}?v=nav4">
 
         {% block extra_css %}
         {% endblock %}
@@ -32,32 +32,73 @@
         {% wagtailuserbar %}
         {% wagtail_site as current_site %}
 
+        {# ── Alert Bar (first active) ── #}
+        {% load home_tags %}
+        {% get_active_alert as alert %}
+        {% if alert %}
+        <div class="alert-bar alert-bar--{{ alert.style }}" id="site-alert" role="alert">
+            <div class="alert-bar__inner">
+                <span class="alert-bar__message">{{ alert.message }}</span>
+                {% if alert.link_text and alert.link_url %}
+                <a href="{{ alert.link_url }}" class="alert-bar__link">{{ alert.link_text }}</a>
+                {% endif %}
+                {% if alert.is_dismissible %}
+                <button type="button" class="alert-bar__close" aria-label="بستن" onclick="document.getElementById('site-alert').remove()">×</button>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# ── Navbar ── #}
+        {% get_active_navbar as navbar %}
         <header class="site-header">
             <div class="site-header__inner">
                 <a href="/" class="site-logo">
-                    {{ current_site.site_name|default:"سایت من" }}
-                </a>
-                <nav class="site-nav" aria-label="منوی اصلی">
-                    <a href="/" class="site-nav__link">خانه</a>
-                    {% if current_site and current_site.root_page %}
-                      {% for menuitem in current_site.root_page.get_children.live.in_menu %}
-                        <a href="{% pageurl menuitem %}" class="site-nav__link">
-                          {{ menuitem.title }}
-                        </a>
-                      {% empty %}
-                        {# fallback hard links if in_menu is empty #}
-                        <a href="/about/" class="site-nav__link">درباره من</a>
-                        <a href="/portfolio/" class="site-nav__link">نمونه کارها</a>
-                        <a href="/services/" class="site-nav__link">خدمات</a>
-                        <a href="/blog/" class="site-nav__link">وبلاگ</a>
-                        <a href="/contact/" class="site-nav__link">تماس</a>
-                      {% endfor %}
+                    {% if navbar and navbar.logo_image %}
+                        {% image navbar.logo_image height-40 as logo %}
+                        <img src="{{ logo.url }}" alt="{{ navbar.logo_text }}" height="40">
+                    {% elif navbar and navbar.logo_text %}
+                        {{ navbar.logo_text }}
                     {% else %}
-                      <a href="/about/" class="site-nav__link">درباره من</a>
-                      <a href="/portfolio/" class="site-nav__link">نمونه کارها</a>
-                      <a href="/services/" class="site-nav__link">خدمات</a>
-                      <a href="/blog/" class="site-nav__link">وبلاگ</a>
-                      <a href="/contact/" class="site-nav__link">تماس</a>
+                        {{ current_site.site_name|default:"سایت من" }}
+                    {% endif %}
+                </a>
+
+                <nav class="site-nav" aria-label="منوی اصلی">
+                    {% if navbar and navbar.menu_items.all %}
+                        {% for item in navbar.menu_items.all %}
+                            <a href="{{ item.link_url }}"
+                               class="site-nav__link"
+                               {% if item.open_in_new_tab %}target="_blank" rel="noopener"{% endif %}>
+                                {{ item.label }}
+                            </a>
+                        {% endfor %}
+                    {% else %}
+                        {# fallback hard links #}
+                        <a href="/" class="site-nav__link">خانه</a>
+                        {% if current_site and current_site.root_page %}
+                          {% for menuitem in current_site.root_page.get_children.live.in_menu %}
+                            <a href="{% pageurl menuitem %}" class="site-nav__link">
+                              {{ menuitem.title }}
+                            </a>
+                          {% empty %}
+                            <a href="/about/" class="site-nav__link">درباره من</a>
+                            <a href="/portfolio/" class="site-nav__link">نمونه کارها</a>
+                            <a href="/services/" class="site-nav__link">خدمات</a>
+                            <a href="/blog/" class="site-nav__link">وبلاگ</a>
+                            <a href="/contact/" class="site-nav__link">تماس</a>
+                          {% endfor %}
+                        {% else %}
+                          <a href="/about/" class="site-nav__link">درباره من</a>
+                          <a href="/portfolio/" class="site-nav__link">نمونه کارها</a>
+                          <a href="/services/" class="site-nav__link">خدمات</a>
+                          <a href="/blog/" class="site-nav__link">وبلاگ</a>
+                          <a href="/contact/" class="site-nav__link">تماس</a>
+                        {% endif %}
+                    {% endif %}
+
+                    {% if navbar and navbar.cta_text and navbar.cta_link %}
+                        <a href="{{ navbar.cta_link }}" class="site-nav__link site-nav__cta">{{ navbar.cta_text }}</a>
                     {% endif %}
                 </nav>
             </div>
@@ -67,9 +108,37 @@
             {% block content %}{% endblock %}
         </main>
 
+        {# ── Footer ── #}
+        {% get_active_footer as footer %}
         <footer class="site-footer">
             <div class="site-footer__inner">
-                <p>© {% now "Y" %} — ساخته‌شده با Wagtail + Grok</p>
+                {% if footer %}
+                    {% if footer.about_text %}
+                        <p class="site-footer__about">{{ footer.about_text }}</p>
+                    {% endif %}
+
+                    {% if footer.footer_links.all %}
+                        <nav class="site-footer__links">
+                            {% for link in footer.footer_links.all %}
+                                <a href="{{ link.link_url }}">{{ link.label }}</a>
+                            {% endfor %}
+                        </nav>
+                    {% endif %}
+
+                    {% if footer.social_links.all %}
+                        <div class="site-footer__social">
+                            {% for social in footer.social_links.all %}
+                                <a href="{{ social.url }}" target="_blank" rel="noopener" title="{{ social.platform }}">
+                                    {% if social.icon %}{{ social.icon }}{% else %}{{ social.platform }}{% endif %}
+                                </a>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    <p class="site-footer__copy">{{ footer.copyright_text }}</p>
+                {% else %}
+                    <p>© {% now "Y" %} — ساخته‌شده با Wagtail + Grok</p>
+                {% endif %}
             </div>
         </footer>
 

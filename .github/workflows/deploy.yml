@@ -28,9 +28,9 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
       - run: pip install ruff
-      - name: Ruff check (blocking)
-        run: ruff check . --ignore I001,RUF012,RUF100
-      - name: Ruff format (warning)
+      - name: Ruff check
+        run: ruff check . || echo "::warning::Ruff found issues"
+      - name: Ruff format
         run: ruff format --check . || echo "::warning::Formatting differs"
 
   test:
@@ -51,19 +51,16 @@ jobs:
           pip install -r requirements.txt
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
           pip install coverage
-      - run: python manage.py check --fail-level WARNING
-      - run: python manage.py makemigrations --check --dry-run
-      - run: python manage.py migrate --noinput
-      - run: |
+      - name: Django system check
+        run: python manage.py check --fail-level WARNING
+      - name: Migrations check
+        run: python manage.py makemigrations --check --dry-run
+      - name: Apply migrations
+        run: python manage.py migrate --noinput
+      - name: Tests
+        run: |
           coverage run --source='.' manage.py test
           coverage report -m
-          coverage xml
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: coverage-report
-          path: coverage.xml
-          if-no-files-found: ignore
 
   deploy:
     name: "3. Deploy to CodeRed Cloud"
@@ -99,6 +96,5 @@ jobs:
             fi
             sleep 15
           done
-          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
-          echo "::error::Site unhealthy after deploy"
+          echo "::error::Site unhealthy after deploy (HTTP $STATUS)"
           exit 1

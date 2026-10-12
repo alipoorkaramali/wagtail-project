@@ -1,0 +1,119 @@
+# Persian translations for admin labels
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: fa\n"
+
+msgid "Navbar"
+msgstr "منوی بالا"
+
+msgid "Navbars"
+msgstr "منوهای بالا"
+
+msgid "Footer"
+msgstr "فوتر"
+
+msgid "Footers"
+msgstr "فوترها"
+
+msgid "CTA Banner"
+msgstr "بنر فراخوان"
+
+msgid "CTA Banners"
+msgstr "بنرهای فراخوان"
+
+msgid "Alert Bar"
+msgstr "نوار اعلان"
+
+msgid "Alert Bars"
+msgstr "نوارهای اعلان"
+
+msgid "Testimonial"
+msgstr "نظر مشتری"
+
+msgid "Testimonials"
+msgstr "نظرات مشتریان"
+
+msgid "Team Member"
+msgstr "عضو تیم"
+
+msgid "Team Members"
+msgstr "اعضای تیم"
+
+msgid "Service"
+msgstr "سرویس"
+
+msgid "Services"
+msgstr "سرویس‌ها"
+
+msgid "FAQ Item"
+msgstr "سوال متداول"
+
+msgid "FAQ Items"
+msgstr "سوالات متداول"
+
+msgid "Accordion"
+msgstr "آکاردئون"
+
+msgid "Accordions"
+msgstr "آکاردئون‌ها"
+
+msgid "Partner Logo"
+msgstr "لوگوی همکار"
+
+msgid "Partner Logos"
+msgstr "لوگوهای همکاران"
+
+msgid "Hero Banner"
+msgstr "بنر هیرو"
+
+msgid "Hero Banners"
+msgstr "بنرهای هیرو"
+
+msgid "Contact Info"
+msgstr "اطلاعات تماس"
+
+msgid "Social Link"
+msgstr "شبکه اجتماعی"
+
+msgid "Social Links"
+msgstr "شبکه‌های اجتماعی"
+
+msgid "Pricing Plan"
+msgstr "پلن قیمت"
+
+msgid "Pricing Plans"
+msgstr "پلن‌های قیمت"
+
+msgid "Feature"
+msgstr "ویژگی"
+
+msgid "Features"
+msgstr "ویژگی‌ها"
+
+msgid "Site structure"
+msgstr "ساختار سایت"
+
+msgid "Banners & CTA"
+msgstr "فراخوان و بنر"
+
+msgid "Content"
+msgstr "محتوا"
+
+msgid "Services & Pricing"
+msgstr "خدمات و قیمت"
+
+msgid "Team & Partners"
+msgstr "تیم و همکاران"
+
+msgid "Home Page"
+msgstr "صفحه اصلی"
+
+msgid "Standard Page"
+msgstr "صفحه استاندارد"
+
+msgid "English"
+msgstr "انگلیسی"
+
+msgid "Persian"
+msgstr "فارسی"

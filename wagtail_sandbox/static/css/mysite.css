@@ -87,9 +87,10 @@
   color: #6b6560;
   font-size: 0.92rem;
   font-weight: 600;
-  padding: 0.45rem 0.75rem;
+  padding: 0.45rem 0.85rem;
   border-radius: 999px;
-  transition: background 0.2s, color 0.2s;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
 }
 
 .site-nav__link:hover {
@@ -97,9 +98,18 @@
   background: #f0ebe3;
 }
 
+/* Active menu item – cleaner & more distinct */
 .site-nav__link.is-active {
   color: #1a1916;
-  background: #ebe4da;
+  background: #1a1916;
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(26, 25, 22, 0.15);
+}
+
+.site-nav__link.is-active:hover {
+  background: #333029;
+  color: #fff;
 }
 
 .site-nav__cta {

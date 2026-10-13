@@ -22,7 +22,7 @@
         <base target="_blank">
         {% endif %}
 
-        <link rel="stylesheet" type="text/css" href="{% static 'css/mysite.css' %}?v=nav4">
+        <link rel="stylesheet" type="text/css" href="{% static 'css/mysite.css' %}?v=nav5">
 
         {% block extra_css %}
         {% endblock %}
@@ -67,33 +67,35 @@
                 <nav class="site-nav" aria-label="منوی اصلی">
                     {% if navbar and navbar.menu_items.all %}
                         {% for item in navbar.menu_items.all %}
+                            {% with item_path=item.link_url %}
                             <a href="{{ item.link_url }}"
-                               class="site-nav__link"
+                               class="site-nav__link{% if request.path == item_path or request.path == item_path|add:'/' or item_path != '/' and item_path in request.path %} is-active{% endif %}"
                                {% if item.open_in_new_tab %}target="_blank" rel="noopener"{% endif %}>
                                 {{ item.label }}
                             </a>
+                            {% endwith %}
                         {% endfor %}
                     {% else %}
                         {# fallback hard links #}
-                        <a href="/" class="site-nav__link">خانه</a>
+                        <a href="/" class="site-nav__link{% if request.path == '/' %} is-active{% endif %}">خانه</a>
                         {% if current_site and current_site.root_page %}
                           {% for menuitem in current_site.root_page.get_children.live.in_menu %}
-                            <a href="{% pageurl menuitem %}" class="site-nav__link">
+                            <a href="{% pageurl menuitem %}" class="site-nav__link{% if request.path == menuitem.url %} is-active{% endif %}">
                               {{ menuitem.title }}
                             </a>
                           {% empty %}
-                            <a href="/about/" class="site-nav__link">درباره من</a>
-                            <a href="/portfolio/" class="site-nav__link">نمونه کارها</a>
-                            <a href="/services/" class="site-nav__link">خدمات</a>
-                            <a href="/blog/" class="site-nav__link">وبلاگ</a>
-                            <a href="/contact/" class="site-nav__link">تماس</a>
+                            <a href="/about/" class="site-nav__link{% if '/about' in request.path %} is-active{% endif %}">درباره من</a>
+                            <a href="/portfolio/" class="site-nav__link{% if '/portfolio' in request.path %} is-active{% endif %}">نمونه کارها</a>
+                            <a href="/services/" class="site-nav__link{% if '/services' in request.path %} is-active{% endif %}">خدمات</a>
+                            <a href="/blog/" class="site-nav__link{% if '/blog' in request.path %} is-active{% endif %}">وبلاگ</a>
+                            <a href="/contact/" class="site-nav__link{% if '/contact' in request.path %} is-active{% endif %}">تماس</a>
                           {% endfor %}
                         {% else %}
-                          <a href="/about/" class="site-nav__link">درباره من</a>
-                          <a href="/portfolio/" class="site-nav__link">نمونه کارها</a>
-                          <a href="/services/" class="site-nav__link">خدمات</a>
-                          <a href="/blog/" class="site-nav__link">وبلاگ</a>
-                          <a href="/contact/" class="site-nav__link">تماس</a>
+                          <a href="/about/" class="site-nav__link{% if '/about' in request.path %} is-active{% endif %}">درباره من</a>
+                          <a href="/portfolio/" class="site-nav__link{% if '/portfolio' in request.path %} is-active{% endif %}">نمونه کارها</a>
+                          <a href="/services/" class="site-nav__link{% if '/services' in request.path %} is-active{% endif %}">خدمات</a>
+                          <a href="/blog/" class="site-nav__link{% if '/blog' in request.path %} is-active{% endif %}">وبلاگ</a>
+                          <a href="/contact/" class="site-nav__link{% if '/contact' in request.path %} is-active{% endif %}">تماس</a>
                         {% endif %}
                     {% endif %}
 

@@ -4,25 +4,24 @@
 {% block body_class %}template-homepage{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/home.css' %}?v=px6">
+<link rel="stylesheet" href="{% static 'css/home.css' %}?v=px7">
 {% endblock %}
 
 {% block content %}
 
 <style id="px-force-css">
-/* ===== ULTRA OBVIOUS PARALLAX ===== */
+/* ===== STATIC FIXED HERO BACKGROUND ===== */
 .px-hero {
   position: relative;
   min-height: 100vh;
   display: flex;
   align-items: center;
-  /* transparent so fixed bg shows through */
   background: transparent;
   overflow: visible;
   z-index: 1;
 }
 
-/* Fixed full-viewport background — stays put while page scrolls */
+/* Fixed full-viewport background — stays completely still */
 .px-hero__bg {
   position: fixed;
   top: 0;
@@ -38,8 +37,7 @@
   object-fit: cover;
   object-position: center center;
   display: block;
-  /* slight zoom so edges don't show when fixed */
-  transform: scale(1.05);
+  /* no scale / transform — fully static */
 }
 .px-hero__bg-fallback {
   width: 100%;
@@ -49,7 +47,6 @@
 .px-hero__veil {
   position: absolute;
   inset: 0;
-  /* LIGHTER veil so background movement is visible */
   background: linear-gradient(
     100deg,
     rgba(247, 244, 239, 0.88) 0%,
@@ -89,7 +86,6 @@
 .px-hero__subtitle p { margin: 0; }
 .px-hero__card {
   justify-self: center;
-  will-change: transform;
 }
 .px-hero__card-img {
   width: min(100%, 420px);
@@ -175,50 +171,6 @@
     </div>
   </div>
 </section>
-
-<script>
-(function () {
-  console.log('[parallax] script loaded');
-  var hero = document.getElementById('px-hero');
-  var bg = document.getElementById('px-bg');
-  var card = document.getElementById('px-card');
-  if (!hero || !bg) {
-    console.warn('[parallax] elements missing');
-    return;
-  }
-
-  // Fixed bg already creates strong parallax via CSS.
-  // Extra: scale/shift bg slightly on scroll for more depth,
-  // and float the card opposite to scroll.
-  var ticking = false;
-  function update() {
-    var scrolled = window.pageYOffset || document.documentElement.scrollTop;
-    var heroH = hero.offsetHeight || 1;
-    var progress = Math.min(Math.max(scrolled / heroH, 0), 1.5);
-
-    // Background slowly zooms + drifts (very visible)
-    var scale = 1.05 + progress * 0.15;
-    var y = scrolled * 0.15;
-    bg.style.transform = 'translate3d(0,' + y + 'px,0) scale(' + scale + ')';
-
-    // Card lifts up as you scroll (opposite feel)
-    if (card) {
-      card.style.transform = 'translate3d(0,' + (-scrolled * 0.35) + 'px,0)';
-    }
-    ticking = false;
-  }
-  function onScroll() {
-    if (!ticking) {
-      requestAnimationFrame(update);
-      ticking = true;
-    }
-  }
-  window.addEventListener('scroll', onScroll, { passive: true });
-  window.addEventListener('resize', onScroll, { passive: true });
-  update();
-  console.log('[parallax] active — fixed background mode');
-})();
-</script>
 
 {% if page.services.all %}
 <section class="section services">
